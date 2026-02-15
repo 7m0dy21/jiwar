@@ -89,10 +89,53 @@ export type Database = {
         }
         Relationships: []
       }
+      merchant_transfers: {
+        Row: {
+          amount: number
+          bank_name: string | null
+          created_at: string
+          iban: string | null
+          id: string
+          merchant_id: string
+          notes: string | null
+          status: string
+        }
+        Insert: {
+          amount: number
+          bank_name?: string | null
+          created_at?: string
+          iban?: string | null
+          id?: string
+          merchant_id: string
+          notes?: string | null
+          status?: string
+        }
+        Update: {
+          amount?: number
+          bank_name?: string | null
+          created_at?: string
+          iban?: string | null
+          id?: string
+          merchant_id?: string
+          notes?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_transfers_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       merchants: {
         Row: {
+          bank_name: string | null
           commercial_registration: string | null
           created_at: string
+          iban: string | null
           id: string
           is_active: boolean
           location_lat: number | null
@@ -103,8 +146,10 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          bank_name?: string | null
           commercial_registration?: string | null
           created_at?: string
+          iban?: string | null
           id?: string
           is_active?: boolean
           location_lat?: number | null
@@ -115,8 +160,10 @@ export type Database = {
           user_id: string
         }
         Update: {
+          bank_name?: string | null
           commercial_registration?: string | null
           created_at?: string
+          iban?: string | null
           id?: string
           is_active?: boolean
           location_lat?: number | null

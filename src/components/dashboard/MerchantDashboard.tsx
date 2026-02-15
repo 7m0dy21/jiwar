@@ -2,11 +2,15 @@ import { useAuth } from "@/hooks/useAuth";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Store, DollarSign, Users, LogOut } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Store, DollarSign, Users, LogOut, Landmark, Save } from "lucide-react";
 import jiwarLogo from "@/assets/jiwar-logo.png";
 import QRScanner from "./QRScanner";
 import TransactionList from "./TransactionList";
 import NotificationBell from "./NotificationBell";
+import { toast } from "sonner";
 
 const MerchantDashboard = () => {
   const { user, signOut } = useAuth();
@@ -14,6 +18,10 @@ const MerchantDashboard = () => {
   const [merchant, setMerchant] = useState<any>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [todaySales, setTodaySales] = useState(0);
+  const [iban, setIban] = useState("");
+  const [bankName, setBankName] = useState("");
+  const [savingBank, setSavingBank] = useState(false);
+  const [transfers, setTransfers] = useState<any[]>([]);
 
   useEffect(() => {
     if (!user) return;
@@ -24,9 +32,11 @@ const MerchantDashboard = () => {
       ]);
       setProfile(p.data);
       setMerchant(m.data);
-
-      // Calculate today's sales
       if (m.data) {
+        setIban(m.data.iban || "");
+        setBankName(m.data.bank_name || "");
+
+        // Load today's sales
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         const { data: txs } = await supabase
@@ -36,10 +46,31 @@ const MerchantDashboard = () => {
           .gte("created_at", today.toISOString());
         const total = (txs || []).reduce((sum, t) => sum + Number(t.amount), 0);
         setTodaySales(total);
+
+        // Load transfers
+        const { data: trData } = await supabase
+          .from("merchant_transfers")
+          .select("*")
+          .eq("merchant_id", m.data.id)
+          .order("created_at", { ascending: false })
+          .limit(10);
+        setTransfers(trData || []);
       }
     };
     load();
   }, [user, refreshKey]);
+
+  const handleSaveBankInfo = async () => {
+    if (!merchant) return;
+    setSavingBank(true);
+    const { error } = await supabase
+      .from("merchants")
+      .update({ iban: iban.trim(), bank_name: bankName.trim() })
+      .eq("id", merchant.id);
+    setSavingBank(false);
+    if (error) { toast.error("حدث خطأ في الحفظ"); return; }
+    toast.success("تم حفظ البيانات البنكية");
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -87,6 +118,48 @@ const MerchantDashboard = () => {
             </div>
           ))}
         </div>
+
+        {/* Bank Info Section */}
+        <div className="bg-card border border-border rounded-2xl p-6 shadow-card mb-8">
+          <div className="flex items-center gap-2 mb-4">
+            <Landmark className="w-5 h-5 text-primary" />
+            <h2 className="font-cairo font-bold text-foreground text-lg">البيانات البنكية</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label className="font-cairo">اسم البنك</Label>
+              <Input value={bankName} onChange={(e) => setBankName(e.target.value)} placeholder="مثال: بنك الراجحي" className="mt-1" />
+            </div>
+            <div>
+              <Label className="font-cairo">رقم الآيبان (IBAN)</Label>
+              <Input value={iban} onChange={(e) => setIban(e.target.value)} placeholder="SA0000000000000000000000" dir="ltr" className="mt-1" />
+            </div>
+          </div>
+          <Button onClick={handleSaveBankInfo} disabled={savingBank} className="mt-4 bg-gradient-primary text-primary-foreground font-cairo gap-1">
+            <Save className="w-4 h-4" />
+            {savingBank ? "جارٍ الحفظ..." : "حفظ البيانات البنكية"}
+          </Button>
+        </div>
+
+        {/* Transfers Section */}
+        {transfers.length > 0 && (
+          <div className="bg-card border border-border rounded-2xl p-6 shadow-card mb-8">
+            <h2 className="font-cairo font-bold text-foreground text-lg mb-4">التحويلات المالية</h2>
+            <div className="space-y-3">
+              {transfers.map((t) => (
+                <div key={t.id} className="flex items-center justify-between border-b border-border/50 pb-3">
+                  <div>
+                    <p className="font-cairo font-bold text-foreground">{t.amount} ر.س</p>
+                    <p className="text-xs text-muted-foreground font-ibm">{new Date(t.created_at).toLocaleDateString("ar-SA")}</p>
+                  </div>
+                  <Badge variant={t.status === "completed" ? "default" : t.status === "pending" ? "secondary" : "outline"} className="font-cairo">
+                    {t.status === "completed" ? "مكتمل" : t.status === "pending" ? "قيد المراجعة" : t.status}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
           <h2 className="font-cairo font-bold text-foreground text-lg mb-4">آخر العمليات</h2>
