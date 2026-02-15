@@ -15,6 +15,7 @@ const Dashboard = () => {
   }
 
   if (!user) return <Navigate to="/auth" replace />;
+  if (role === "admin") return <Navigate to="/admin" replace />;
 
   return role === "merchant" ? <MerchantDashboard /> : <CustomerDashboard />;
 };
