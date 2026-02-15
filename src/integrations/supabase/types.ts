@@ -119,6 +119,51 @@ export type Database = {
         }
         Relationships: []
       }
+      transactions: {
+        Row: {
+          amount: number
+          created_at: string
+          customer_id: string
+          description: string | null
+          id: string
+          merchant_id: string
+          status: Database["public"]["Enums"]["transaction_status"]
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          customer_id: string
+          description?: string | null
+          id?: string
+          merchant_id: string
+          status?: Database["public"]["Enums"]["transaction_status"]
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          customer_id?: string
+          description?: string | null
+          id?: string
+          merchant_id?: string
+          status?: Database["public"]["Enums"]["transaction_status"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transactions_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -152,9 +197,14 @@ export type Database = {
         }
         Returns: boolean
       }
+      process_transaction: {
+        Args: { p_amount: number; p_customer_id: string; p_merchant_id: string }
+        Returns: string
+      }
     }
     Enums: {
       app_role: "admin" | "merchant" | "customer"
+      transaction_status: "pending" | "completed" | "cancelled" | "refunded"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -283,6 +333,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "merchant", "customer"],
+      transaction_status: ["pending", "completed", "cancelled", "refunded"],
     },
   },
 } as const
