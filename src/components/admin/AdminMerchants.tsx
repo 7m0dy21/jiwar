@@ -3,23 +3,27 @@ import { supabase } from "@/integrations/supabase/client";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { Trash2 } from "lucide-react";
 
 const AdminMerchants = () => {
   const [merchants, setMerchants] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<Map<string, any>>(new Map());
   const [loading, setLoading] = useState(true);
+  const [deleteMerchant, setDeleteMerchant] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
 
   const load = async () => {
     setLoading(true);
-    const [{ data: merchantsData }, { data: profilesData }] = await Promise.all([
+    const [merchantsRes, profilesRes] = await Promise.all([
       supabase.from("merchants").select("*").order("created_at", { ascending: false }),
       supabase.from("profiles").select("user_id, full_name, phone"),
     ]);
 
-    setMerchants(merchantsData || []);
+    setMerchants(merchantsRes.data || []);
     const profileMap = new Map(
-      (profilesData || []).map((p) => [p.user_id, p])
+      (profilesRes.data || []).map((p) => [p.user_id, p])
     );
     setProfiles(profileMap);
     setLoading(false);
@@ -34,6 +38,25 @@ const AdminMerchants = () => {
       .eq("id", id);
     if (error) { toast.error("حدث خطأ"); return; }
     toast.success(!current ? "تم تفعيل التاجر" : "تم إيقاف التاجر");
+    load();
+  };
+
+  const handleDelete = async () => {
+    if (!deleteMerchant) return;
+    setSaving(true);
+
+    const userId = deleteMerchant.user_id;
+    const merchantId = deleteMerchant.id;
+
+    await supabase.from("transactions").delete().eq("merchant_id", merchantId);
+    await supabase.from("notifications").delete().eq("user_id", userId);
+    await supabase.from("merchants").delete().eq("id", merchantId);
+    await supabase.from("user_roles").delete().eq("user_id", userId);
+    await supabase.from("profiles").delete().eq("user_id", userId);
+
+    setSaving(false);
+    toast.success("تم حذف التاجر بنجاح");
+    setDeleteMerchant(null);
     load();
   };
 
@@ -62,7 +85,7 @@ const AdminMerchants = () => {
                   <th className="text-right py-3 px-4">الجوال</th>
                   <th className="text-right py-3 px-4">العنوان</th>
                   <th className="text-right py-3 px-4">الحالة</th>
-                  <th className="text-right py-3 px-4">إجراء</th>
+                  <th className="text-right py-3 px-4">إجراءات</th>
                 </tr>
               </thead>
               <tbody>
@@ -80,14 +103,19 @@ const AdminMerchants = () => {
                         </Badge>
                       </td>
                       <td className="py-3 px-4">
-                        <Button
-                          size="sm"
-                          variant={m.is_active ? "outline" : "default"}
-                          onClick={() => toggleActive(m.id, m.is_active)}
-                          className={`font-cairo text-xs ${!m.is_active ? "bg-gradient-primary text-primary-foreground" : ""}`}
-                        >
-                          {m.is_active ? "إيقاف" : "تفعيل"}
-                        </Button>
+                        <div className="flex gap-1">
+                          <Button
+                            size="sm"
+                            variant={m.is_active ? "outline" : "default"}
+                            onClick={() => toggleActive(m.id, m.is_active)}
+                            className={`font-cairo text-xs ${!m.is_active ? "bg-gradient-primary text-primary-foreground" : ""}`}
+                          >
+                            {m.is_active ? "إيقاف" : "تفعيل"}
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => setDeleteMerchant(m)} className="font-cairo text-xs gap-1 text-destructive hover:text-destructive" title="حذف">
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -97,6 +125,31 @@ const AdminMerchants = () => {
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteMerchant} onOpenChange={(open) => !open && setDeleteMerchant(null)}>
+        <DialogContent className="sm:max-w-md" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="font-cairo text-destructive">تأكيد حذف التاجر</DialogTitle>
+            <DialogDescription className="font-ibm">
+              سيتم حذف التاجر وجميع بياناته (المعاملات). هذا الإجراء لا يمكن التراجع عنه.
+            </DialogDescription>
+          </DialogHeader>
+          {deleteMerchant && (
+            <p className="text-sm font-ibm">
+              التاجر: <span className="font-cairo font-bold text-foreground">{deleteMerchant.store_name}</span>
+              {" — "}
+              <span className="text-muted-foreground">{profiles.get(deleteMerchant.user_id)?.full_name || ""}</span>
+            </p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteMerchant(null)} className="font-cairo">إلغاء</Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={saving} className="font-cairo">
+              {saving ? "جارٍ الحذف..." : "حذف نهائي"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
