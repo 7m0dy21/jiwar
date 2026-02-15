@@ -20,11 +20,20 @@ async function getGoogleAccessToken(serviceAccount: any): Promise<string> {
   const encode = (obj: any) => btoa(JSON.stringify(obj)).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
   const unsignedToken = `${encode(header)}.${encode(claim)}`;
 
-  // Import the private key
-  const pemContents = serviceAccount.private_key
-    .replace("-----BEGIN PRIVATE KEY-----", "")
-    .replace("-----END PRIVATE KEY-----", "")
-    .replace(/\n/g, "");
+  // Import the private key - handle various formats
+  let pemContents = serviceAccount.private_key
+    .replace(/-----BEGIN PRIVATE KEY-----/g, "")
+    .replace(/-----END PRIVATE KEY-----/g, "")
+    .replace(/-----BEGIN RSA PRIVATE KEY-----/g, "")
+    .replace(/-----END RSA PRIVATE KEY-----/g, "")
+    .replace(/\s/g, "")
+    .trim();
+  
+  // Pad base64 if needed
+  while (pemContents.length % 4 !== 0) {
+    pemContents += "=";
+  }
+  
   const binaryKey = Uint8Array.from(atob(pemContents), (c) => c.charCodeAt(0));
 
   const cryptoKey = await crypto.subtle.importKey(
@@ -113,15 +122,23 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const serviceAccountJson = Deno.env.get("GOOGLE_SERVICE_ACCOUNT_JSON");
+    const clientEmail = Deno.env.get("GOOGLE_CLIENT_EMAIL");
+    const privateKey = Deno.env.get("GOOGLE_PRIVATE_KEY");
     const spreadsheetId = Deno.env.get("GOOGLE_SPREADSHEET_ID");
 
-    if (!serviceAccountJson || !spreadsheetId) {
-      throw new Error("Missing GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_SPREADSHEET_ID");
+    if (!clientEmail || !privateKey || !spreadsheetId) {
+      throw new Error("Missing GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY, or GOOGLE_SPREADSHEET_ID");
     }
 
-    console.log("Service account JSON length:", serviceAccountJson.length, "starts with:", serviceAccountJson.substring(0, 5));
-    const serviceAccount = JSON.parse(serviceAccountJson);
+    console.log("Client email:", clientEmail);
+    console.log("Private key length:", privateKey.length, "starts with:", privateKey.substring(0, 30));
+    console.log("Private key ends with:", privateKey.substring(privateKey.length - 30));
+
+    // Reconstruct service account object from individual secrets
+    const serviceAccount = {
+      client_email: clientEmail,
+      private_key: privateKey.replace(/\\n/g, "\n"),
+    };
     const accessToken = await getGoogleAccessToken(serviceAccount);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
