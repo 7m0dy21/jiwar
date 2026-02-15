@@ -7,15 +7,21 @@ import { toast } from "sonner";
 
 const AdminMerchants = () => {
   const [merchants, setMerchants] = useState<any[]>([]);
+  const [profiles, setProfiles] = useState<Map<string, any>>(new Map());
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from("merchants")
-      .select("*, profiles!merchants_user_id_fkey(full_name, phone)")
-      .order("created_at", { ascending: false });
-    setMerchants(data || []);
+    const [{ data: merchantsData }, { data: profilesData }] = await Promise.all([
+      supabase.from("merchants").select("*").order("created_at", { ascending: false }),
+      supabase.from("profiles").select("user_id, full_name, phone"),
+    ]);
+
+    setMerchants(merchantsData || []);
+    const profileMap = new Map(
+      (profilesData || []).map((p) => [p.user_id, p])
+    );
+    setProfiles(profileMap);
     setLoading(false);
   };
 
@@ -60,29 +66,32 @@ const AdminMerchants = () => {
                 </tr>
               </thead>
               <tbody>
-                {merchants.map((m) => (
-                  <tr key={m.id} className="border-b border-border/50 hover:bg-muted/20">
-                    <td className="py-3 px-4 font-cairo font-bold text-foreground">{m.store_name || "—"}</td>
-                    <td className="py-3 px-4 font-cairo text-foreground">{(m.profiles as any)?.full_name || "—"}</td>
-                    <td className="py-3 px-4 font-ibm text-muted-foreground" dir="ltr">{(m.profiles as any)?.phone || "—"}</td>
-                    <td className="py-3 px-4 font-ibm text-muted-foreground">{m.store_address || "—"}</td>
-                    <td className="py-3 px-4">
-                      <Badge variant={m.is_active ? "default" : "secondary"} className="font-cairo">
-                        {m.is_active ? "مفعّل" : "معطّل"}
-                      </Badge>
-                    </td>
-                    <td className="py-3 px-4">
-                      <Button
-                        size="sm"
-                        variant={m.is_active ? "outline" : "default"}
-                        onClick={() => toggleActive(m.id, m.is_active)}
-                        className={`font-cairo text-xs ${!m.is_active ? "bg-gradient-primary text-primary-foreground" : ""}`}
-                      >
-                        {m.is_active ? "إيقاف" : "تفعيل"}
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
+                {merchants.map((m) => {
+                  const profile = profiles.get(m.user_id);
+                  return (
+                    <tr key={m.id} className="border-b border-border/50 hover:bg-muted/20">
+                      <td className="py-3 px-4 font-cairo font-bold text-foreground">{m.store_name || "—"}</td>
+                      <td className="py-3 px-4 font-cairo text-foreground">{profile?.full_name || "—"}</td>
+                      <td className="py-3 px-4 font-ibm text-muted-foreground" dir="ltr">{profile?.phone || "—"}</td>
+                      <td className="py-3 px-4 font-ibm text-muted-foreground">{m.store_address || "—"}</td>
+                      <td className="py-3 px-4">
+                        <Badge variant={m.is_active ? "default" : "secondary"} className="font-cairo">
+                          {m.is_active ? "مفعّل" : "معطّل"}
+                        </Badge>
+                      </td>
+                      <td className="py-3 px-4">
+                        <Button
+                          size="sm"
+                          variant={m.is_active ? "outline" : "default"}
+                          onClick={() => toggleActive(m.id, m.is_active)}
+                          className={`font-cairo text-xs ${!m.is_active ? "bg-gradient-primary text-primary-foreground" : ""}`}
+                        >
+                          {m.is_active ? "إيقاف" : "تفعيل"}
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
