@@ -86,6 +86,125 @@ export type Database = {
         }
         Relationships: []
       }
+      monthly_statements: {
+        Row: {
+          created_at: string
+          customer_id: string
+          due_date: string
+          id: string
+          paid_amount: number
+          period_end: string
+          period_start: string
+          status: Database["public"]["Enums"]["payment_status"]
+          total_amount: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          customer_id: string
+          due_date: string
+          id?: string
+          paid_amount?: number
+          period_end: string
+          period_start: string
+          status?: Database["public"]["Enums"]["payment_status"]
+          total_amount?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string
+          due_date?: string
+          id?: string
+          paid_amount?: number
+          period_end?: string
+          period_start?: string
+          status?: Database["public"]["Enums"]["payment_status"]
+          total_amount?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "monthly_statements_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          created_at: string
+          id: string
+          is_read: boolean
+          message: string
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message: string
+          title: string
+          type?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          message?: string
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      payments: {
+        Row: {
+          amount: number
+          created_at: string
+          customer_id: string
+          id: string
+          payment_method: string | null
+          statement_id: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          customer_id: string
+          id?: string
+          payment_method?: string | null
+          statement_id?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          customer_id?: string
+          id?: string
+          payment_method?: string | null
+          statement_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_statement_id_fkey"
+            columns: ["statement_id"]
+            isOneToOne: false
+            referencedRelation: "monthly_statements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -197,6 +316,14 @@ export type Database = {
         }
         Returns: boolean
       }
+      make_payment: {
+        Args: {
+          p_amount: number
+          p_customer_id: string
+          p_payment_method?: string
+        }
+        Returns: string
+      }
       process_transaction: {
         Args: { p_amount: number; p_customer_id: string; p_merchant_id: string }
         Returns: string
@@ -204,6 +331,7 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "merchant" | "customer"
+      payment_status: "pending" | "paid" | "overdue" | "partial"
       transaction_status: "pending" | "completed" | "cancelled" | "refunded"
     }
     CompositeTypes: {
@@ -333,6 +461,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "merchant", "customer"],
+      payment_status: ["pending", "paid", "overdue", "partial"],
       transaction_status: ["pending", "completed", "cancelled", "refunded"],
     },
   },

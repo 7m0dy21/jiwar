@@ -6,38 +6,44 @@ import { Wallet, Receipt, LogOut } from "lucide-react";
 import jiwarLogo from "@/assets/jiwar-logo.png";
 import QRDisplay from "./QRDisplay";
 import TransactionList from "./TransactionList";
+import NotificationBell from "./NotificationBell";
+import PaymentDialog from "./PaymentDialog";
 
 const CustomerDashboard = () => {
   const { user, signOut } = useAuth();
   const [profile, setProfile] = useState<any>(null);
   const [customer, setCustomer] = useState<any>(null);
   const [txCount, setTxCount] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  const reload = async () => {
+    if (!user) return;
+    const [p, c] = await Promise.all([
+      supabase.from("profiles").select("*").eq("user_id", user.id).single(),
+      supabase.from("customers").select("*").eq("user_id", user.id).single(),
+    ]);
+    setProfile(p.data);
+    setCustomer(c.data);
+    if (c.data) {
+      const { count } = await supabase
+        .from("transactions")
+        .select("*", { count: "exact", head: true })
+        .eq("customer_id", c.data.id);
+      setTxCount(count || 0);
+    }
+    setRefreshKey((k) => k + 1);
+  };
 
   useEffect(() => {
-    if (!user) return;
-    const load = async () => {
-      const [p, c] = await Promise.all([
-        supabase.from("profiles").select("*").eq("user_id", user.id).single(),
-        supabase.from("customers").select("*").eq("user_id", user.id).single(),
-      ]);
-      setProfile(p.data);
-      setCustomer(c.data);
+    reload();
 
-      if (c.data) {
-        const { count } = await supabase
-          .from("transactions")
-          .select("*", { count: "exact", head: true })
-          .eq("customer_id", c.data.id);
-        setTxCount(count || 0);
-      }
-    };
-    load();
+    if (!user) return;
 
     // Realtime subscription for balance updates
     const channel = supabase
       .channel("customer-transactions")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "transactions" }, () => {
-        load(); // Reload on new transaction
+        reload(); // Reload on new transaction
       })
       .subscribe();
 
@@ -57,10 +63,13 @@ const CustomerDashboard = () => {
             <p className="text-sm text-muted-foreground font-ibm">{profile?.full_name}</p>
           </div>
         </div>
-        <Button variant="ghost" size="sm" onClick={signOut} className="text-muted-foreground">
-          <LogOut className="w-4 h-4 ml-2" />
-          خروج
-        </Button>
+        <div className="flex items-center gap-2">
+          <NotificationBell />
+          <Button variant="ghost" size="sm" onClick={signOut} className="text-muted-foreground">
+            <LogOut className="w-4 h-4 ml-2" />
+            خروج
+          </Button>
+        </div>
       </header>
 
       <main className="container mx-auto px-6 py-8">
@@ -76,6 +85,13 @@ const CustomerDashboard = () => {
             />
           </div>
         </div>
+
+        {/* Payment button */}
+        {customer && (
+          <div className="mb-8">
+            <PaymentDialog customerId={customer.id} owedAmount={limit - available} onSuccess={reload} />
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
@@ -105,7 +121,7 @@ const CustomerDashboard = () => {
 
         <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
           <h2 className="font-cairo font-bold text-foreground text-lg mb-4">سجل العمليات</h2>
-          {user && <TransactionList userId={user.id} role="customer" />}
+          {user && <TransactionList userId={user.id} role="customer" refreshKey={refreshKey} />}
         </div>
       </main>
     </div>
