@@ -94,6 +94,7 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
   const handleProcess = async () => {
     const numAmount = parseFloat(amount);
     if (!numAmount || numAmount <= 0) { toast.error("أدخل مبلغاً صالحاً"); return; }
+    if (numAmount > customerInfo?.available_balance) { toast.error("المبلغ أكبر من رصيد العميل المتاح"); return; }
     setLoading(true);
     try {
       const { data, error } = await supabase.rpc("process_transaction", {
