@@ -120,6 +120,7 @@ Deno.serve(async (req) => {
       throw new Error("Missing GOOGLE_SERVICE_ACCOUNT_JSON or GOOGLE_SPREADSHEET_ID");
     }
 
+    console.log("Service account JSON length:", serviceAccountJson.length, "starts with:", serviceAccountJson.substring(0, 5));
     const serviceAccount = JSON.parse(serviceAccountJson);
     const accessToken = await getGoogleAccessToken(serviceAccount);
 
