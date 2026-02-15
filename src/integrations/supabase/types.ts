@@ -128,6 +128,13 @@ export type Database = {
             referencedRelation: "merchants"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "merchant_transfers_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants_public"
+            referencedColumns: ["id"]
+          },
         ]
       }
       merchants: {
@@ -370,6 +377,13 @@ export type Database = {
             referencedRelation: "merchants"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "transactions_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants_public"
+            referencedColumns: ["id"]
+          },
         ]
       }
       user_roles: {
@@ -395,7 +409,33 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      merchants_public: {
+        Row: {
+          id: string | null
+          is_active: boolean | null
+          location_lat: number | null
+          location_lng: number | null
+          store_address: string | null
+          store_name: string | null
+        }
+        Insert: {
+          id?: string | null
+          is_active?: boolean | null
+          location_lat?: number | null
+          location_lng?: number | null
+          store_address?: string | null
+          store_name?: string | null
+        }
+        Update: {
+          id?: string | null
+          is_active?: boolean | null
+          location_lat?: number | null
+          location_lng?: number | null
+          store_address?: string | null
+          store_name?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       has_role: {
@@ -405,6 +445,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_super_admin: { Args: { _user_id: string }; Returns: boolean }
       make_payment: {
         Args: {
           p_amount: number
