@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.3";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 // Google Auth: get access token from service account
@@ -122,6 +122,38 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+
+    // Check if called via HTTP (not trigger) - require admin auth
+    const authHeader = req.headers.get("Authorization");
+    const isTriggerCall = !authHeader || authHeader === `Bearer ${serviceRoleKey}`;
+    
+    if (!isTriggerCall) {
+      // Verify user is admin
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(authHeader.replace('Bearer ', ''));
+      if (claimsError || !claimsData?.claims?.sub) {
+        return new Response(JSON.stringify({ error: "غير مصرح" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      const adminCheck = createClient(supabaseUrl, serviceRoleKey);
+      const { data: roleData } = await adminCheck
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", claimsData.claims.sub)
+        .eq("role", "admin");
+      if (!roleData || roleData.length === 0) {
+        return new Response(JSON.stringify({ error: "يجب أن تكون مسؤولاً" }), {
+          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
     const clientEmail = Deno.env.get("GOOGLE_CLIENT_EMAIL");
     const privateKey = Deno.env.get("GOOGLE_PRIVATE_KEY");
     const spreadsheetId = Deno.env.get("GOOGLE_SPREADSHEET_ID");
@@ -130,10 +162,6 @@ Deno.serve(async (req) => {
       throw new Error("Missing GOOGLE_CLIENT_EMAIL, GOOGLE_PRIVATE_KEY, or GOOGLE_SPREADSHEET_ID");
     }
 
-    console.log("Client email:", clientEmail);
-    console.log("Private key length:", privateKey.length, "starts with:", privateKey.substring(0, 30));
-    console.log("Private key ends with:", privateKey.substring(privateKey.length - 30));
-
     // Reconstruct service account object from individual secrets
     const serviceAccount = {
       client_email: clientEmail,
@@ -141,8 +169,6 @@ Deno.serve(async (req) => {
     };
     const accessToken = await getGoogleAccessToken(serviceAccount);
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
     // Export Customers
