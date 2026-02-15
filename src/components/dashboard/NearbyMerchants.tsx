@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Store, MapPin, CheckCircle, Phone } from "lucide-react";
+import { Store, MapPin, CheckCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 interface Merchant {
@@ -8,7 +8,6 @@ interface Merchant {
   store_name: string;
   store_address: string | null;
   is_active: boolean;
-  commercial_registration: string | null;
 }
 
 const NearbyMerchants = () => {
@@ -20,7 +19,7 @@ const NearbyMerchants = () => {
       setLoading(true);
       const { data } = await supabase
         .from("merchants")
-        .select("id, store_name, store_address, is_active, commercial_registration")
+        .select("id, store_name, store_address, is_active")
         .eq("is_active", true)
         .order("store_name");
       setMerchants(data || []);
@@ -77,11 +76,6 @@ const NearbyMerchants = () => {
                   <p className="text-sm text-muted-foreground font-ibm flex items-center gap-1">
                     <MapPin className="w-3.5 h-3.5 shrink-0" />
                     {merchant.store_address}
-                  </p>
-                )}
-                {merchant.commercial_registration && (
-                  <p className="text-xs text-muted-foreground/70 font-ibm mt-1">
-                    سجل تجاري: {merchant.commercial_registration}
                   </p>
                 )}
               </div>
