@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Trash2, Pencil, UserPlus, Ban, CheckCircle } from "lucide-react";
+import { Trash2, Pencil, UserPlus, Send } from "lucide-react";
 
 const AdminMerchants = () => {
   const [merchants, setMerchants] = useState<any[]>([]);
@@ -16,13 +16,13 @@ const AdminMerchants = () => {
   const [loading, setLoading] = useState(true);
   const [deleteMerchant, setDeleteMerchant] = useState<any>(null);
   const [editMerchant, setEditMerchant] = useState<any>(null);
+  const [transferMerchant, setTransferMerchant] = useState<any>(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // Edit form
-  const [editForm, setEditForm] = useState({ storeName: "", storeAddress: "" });
-
-  // Add merchant form
+  const [editForm, setEditForm] = useState({ storeName: "", storeAddress: "", iban: "", bankName: "" });
+  const [transferAmount, setTransferAmount] = useState("");
+  const [transferNotes, setTransferNotes] = useState("");
   const [newMerchant, setNewMerchant] = useState({ email: "", password: "", fullName: "", phone: "", storeName: "" });
 
   const load = async () => {
@@ -58,7 +58,7 @@ const AdminMerchants = () => {
 
   const openEditDialog = (m: any) => {
     setEditMerchant(m);
-    setEditForm({ storeName: m.store_name || "", storeAddress: m.store_address || "" });
+    setEditForm({ storeName: m.store_name || "", storeAddress: m.store_address || "", iban: m.iban || "", bankName: m.bank_name || "" });
   };
 
   const handleSaveEdit = async () => {
@@ -67,11 +67,37 @@ const AdminMerchants = () => {
     const { error } = await supabase.from("merchants").update({
       store_name: editForm.storeName,
       store_address: editForm.storeAddress,
+      iban: editForm.iban,
+      bank_name: editForm.bankName,
     }).eq("id", editMerchant.id);
     setSaving(false);
     if (error) { toast.error("حدث خطأ"); return; }
     toast.success("تم تحديث بيانات التاجر");
     setEditMerchant(null);
+    load();
+  };
+
+  const handleTransfer = async () => {
+    if (!transferMerchant) return;
+    const amt = Number(transferAmount);
+    if (isNaN(amt) || amt <= 0) { toast.error("أدخل مبلغاً صالحاً"); return; }
+    setSaving(true);
+
+    const { error } = await supabase.from("merchant_transfers").insert({
+      merchant_id: transferMerchant.id,
+      amount: amt,
+      iban: transferMerchant.iban || "",
+      bank_name: transferMerchant.bank_name || "",
+      status: "completed",
+      notes: transferNotes || null,
+    });
+
+    setSaving(false);
+    if (error) { toast.error("حدث خطأ في التحويل"); return; }
+    toast.success(`تم تحويل ${amt} ر.س للتاجر ${transferMerchant.store_name}`);
+    setTransferMerchant(null);
+    setTransferAmount("");
+    setTransferNotes("");
     load();
   };
 
@@ -81,7 +107,6 @@ const AdminMerchants = () => {
       return;
     }
     setSaving(true);
-
     const { error } = await supabase.auth.signUp({
       email: newMerchant.email.trim(),
       password: newMerchant.password,
@@ -94,7 +119,6 @@ const AdminMerchants = () => {
         },
       },
     });
-
     setSaving(false);
     if (error) { toast.error(error.message); return; }
     toast.success("تم إضافة التاجر بنجاح");
@@ -109,6 +133,7 @@ const AdminMerchants = () => {
     const userId = deleteMerchant.user_id;
     const merchantId = deleteMerchant.id;
 
+    await supabase.from("merchant_transfers").delete().eq("merchant_id", merchantId);
     await supabase.from("transactions").delete().eq("merchant_id", merchantId);
     await supabase.from("notifications").delete().eq("user_id", userId);
     await supabase.from("merchants").delete().eq("id", merchantId);
@@ -148,7 +173,8 @@ const AdminMerchants = () => {
                   <th className="text-right py-3 px-4">صاحب المحل</th>
                   <th className="text-right py-3 px-4">الجوال</th>
                   <th className="text-right py-3 px-4">البريد</th>
-                  <th className="text-right py-3 px-4">العنوان</th>
+                  <th className="text-right py-3 px-4">البنك</th>
+                  <th className="text-right py-3 px-4">الآيبان</th>
                   <th className="text-right py-3 px-4">الحالة</th>
                   <th className="text-right py-3 px-4">إجراءات</th>
                 </tr>
@@ -162,7 +188,8 @@ const AdminMerchants = () => {
                       <td className="py-3 px-4 font-cairo text-foreground">{profile?.full_name || "—"}</td>
                       <td className="py-3 px-4 font-ibm text-muted-foreground" dir="ltr">{profile?.phone || "—"}</td>
                       <td className="py-3 px-4 font-ibm text-muted-foreground text-xs" dir="ltr">{emails.get(m.user_id) || "—"}</td>
-                      <td className="py-3 px-4 font-ibm text-muted-foreground">{m.store_address || "—"}</td>
+                      <td className="py-3 px-4 font-cairo text-muted-foreground text-xs">{m.bank_name || "—"}</td>
+                      <td className="py-3 px-4 font-ibm text-muted-foreground text-xs" dir="ltr">{m.iban || "—"}</td>
                       <td className="py-3 px-4">
                         <Badge variant={m.is_active ? "default" : "secondary"} className="font-cairo">
                           {m.is_active ? "مفعّل" : "معطّل"}
@@ -176,6 +203,9 @@ const AdminMerchants = () => {
                           </Button>
                           <Button size="sm" variant="outline" onClick={() => openEditDialog(m)} className="font-cairo text-xs gap-1" title="تعديل">
                             <Pencil className="h-3 w-3" />
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => { setTransferMerchant(m); setTransferAmount(""); setTransferNotes(""); }} className="font-cairo text-xs gap-1 text-primary" title="تحويل رصيد">
+                            <Send className="h-3 w-3" />
                           </Button>
                           <Button size="sm" variant="outline" onClick={() => setDeleteMerchant(m)} className="font-cairo text-xs gap-1 text-destructive hover:text-destructive" title="حذف">
                             <Trash2 className="h-3 w-3" />
@@ -243,11 +273,55 @@ const AdminMerchants = () => {
               <Label className="font-cairo">العنوان</Label>
               <Input value={editForm.storeAddress} onChange={(e) => setEditForm(p => ({ ...p, storeAddress: e.target.value }))} className="mt-1" />
             </div>
+            <div>
+              <Label className="font-cairo">اسم البنك</Label>
+              <Input value={editForm.bankName} onChange={(e) => setEditForm(p => ({ ...p, bankName: e.target.value }))} className="mt-1" />
+            </div>
+            <div>
+              <Label className="font-cairo">رقم الآيبان (IBAN)</Label>
+              <Input value={editForm.iban} onChange={(e) => setEditForm(p => ({ ...p, iban: e.target.value }))} className="mt-1" dir="ltr" />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditMerchant(null)} className="font-cairo">إلغاء</Button>
             <Button onClick={handleSaveEdit} disabled={saving} className="bg-gradient-primary text-primary-foreground font-cairo">
               {saving ? "جارٍ الحفظ..." : "حفظ"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Transfer Dialog */}
+      <Dialog open={!!transferMerchant} onOpenChange={(open) => !open && setTransferMerchant(null)}>
+        <DialogContent className="sm:max-w-md" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="font-cairo">تحويل رصيد للتاجر</DialogTitle>
+          </DialogHeader>
+          {transferMerchant && (
+            <div className="space-y-4">
+              <p className="text-sm font-ibm">
+                التاجر: <span className="font-cairo font-bold text-foreground">{transferMerchant.store_name}</span>
+              </p>
+              {transferMerchant.bank_name && (
+                <p className="text-sm font-ibm text-muted-foreground">
+                  البنك: <span className="font-bold">{transferMerchant.bank_name}</span>
+                  {transferMerchant.iban && <> — IBAN: <span className="font-bold" dir="ltr">{transferMerchant.iban}</span></>}
+                </p>
+              )}
+              <div>
+                <Label className="font-cairo">المبلغ (ر.س)</Label>
+                <Input type="number" min="0" value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)} className="mt-1" dir="ltr" />
+              </div>
+              <div>
+                <Label className="font-cairo">ملاحظات (اختياري)</Label>
+                <Input value={transferNotes} onChange={(e) => setTransferNotes(e.target.value)} className="mt-1" />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTransferMerchant(null)} className="font-cairo">إلغاء</Button>
+            <Button onClick={handleTransfer} disabled={saving} className="bg-gradient-primary text-primary-foreground font-cairo">
+              {saving ? "جارٍ التحويل..." : "تأكيد التحويل"}
             </Button>
           </DialogFooter>
         </DialogContent>
