@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
 import jiwarLogo from "@/assets/jiwar-logo.png";
 import heroBg from "@/assets/hero-bg.jpg";
 import { ShieldCheck, QrCode, CreditCard } from "lucide-react";
@@ -70,11 +71,11 @@ const HeroSection = () => {
             animate={{ opacity: 1 }}
             transition={{ delay: 1 }}
           >
-            <Button size="lg" className="bg-gradient-primary text-primary-foreground font-bold text-lg px-8 py-6 rounded-xl glow-green hover:opacity-90 transition-opacity">
-              سجّل كتاجر
+            <Button asChild size="lg" className="bg-gradient-primary text-primary-foreground font-bold text-lg px-8 py-6 rounded-xl glow-green hover:opacity-90 transition-opacity">
+              <Link to="/auth">سجّل كتاجر</Link>
             </Button>
-            <Button size="lg" variant="outline" className="border-primary/40 text-foreground font-bold text-lg px-8 py-6 rounded-xl hover:bg-primary/10 transition-colors">
-              احصل على حد ائتماني
+            <Button asChild size="lg" variant="outline" className="border-primary/40 text-foreground font-bold text-lg px-8 py-6 rounded-xl hover:bg-primary/10 transition-colors">
+              <Link to="/auth">احصل على حد ائتماني</Link>
             </Button>
           </motion.div>
         </motion.div>
