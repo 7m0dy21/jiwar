@@ -2,13 +2,16 @@ import { useAuth } from "@/hooks/useAuth";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Wallet, QrCode, Receipt, LogOut } from "lucide-react";
+import { Wallet, Receipt, LogOut } from "lucide-react";
 import jiwarLogo from "@/assets/jiwar-logo.png";
+import QRDisplay from "./QRDisplay";
+import TransactionList from "./TransactionList";
 
 const CustomerDashboard = () => {
   const { user, signOut } = useAuth();
   const [profile, setProfile] = useState<any>(null);
   const [customer, setCustomer] = useState<any>(null);
+  const [txCount, setTxCount] = useState(0);
 
   useEffect(() => {
     if (!user) return;
@@ -19,8 +22,26 @@ const CustomerDashboard = () => {
       ]);
       setProfile(p.data);
       setCustomer(c.data);
+
+      if (c.data) {
+        const { count } = await supabase
+          .from("transactions")
+          .select("*", { count: "exact", head: true })
+          .eq("customer_id", c.data.id);
+        setTxCount(count || 0);
+      }
     };
     load();
+
+    // Realtime subscription for balance updates
+    const channel = supabase
+      .channel("customer-transactions")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "transactions" }, () => {
+        load(); // Reload on new transaction
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, [user]);
 
   const available = customer?.available_balance ?? 0;
@@ -28,7 +49,6 @@ const CustomerDashboard = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="border-b border-border bg-card px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <img src={jiwarLogo} alt="جوار" className="w-10 h-10" />
@@ -58,25 +78,34 @@ const CustomerDashboard = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          {[
-            { icon: QrCode, label: "كود الدفع", value: "عرض الكود" },
-            { icon: Wallet, label: "المستحقات", value: `${limit - available} ر.س` },
-            { icon: Receipt, label: "العمليات", value: "٠ عملية" },
-          ].map((item, i) => (
-            <div key={i} className="bg-card border border-border rounded-2xl p-6 shadow-card">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
-                  <item.icon className="w-5 h-5 text-primary" />
-                </div>
-                <span className="text-sm text-muted-foreground font-ibm">{item.label}</span>
+          <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
+            {customer?.qr_code && (
+              <QRDisplay qrCode={customer.qr_code} name={profile?.full_name || "عميل"} />
+            )}
+          </div>
+          <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
+                <Wallet className="w-5 h-5 text-primary" />
               </div>
-              <p className="text-xl font-cairo font-bold text-foreground">{item.value}</p>
+              <span className="text-sm text-muted-foreground font-ibm">المستحقات</span>
             </div>
-          ))}
+            <p className="text-xl font-cairo font-bold text-foreground">{limit - available} ر.س</p>
+          </div>
+          <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
+                <Receipt className="w-5 h-5 text-primary" />
+              </div>
+              <span className="text-sm text-muted-foreground font-ibm">العمليات</span>
+            </div>
+            <p className="text-xl font-cairo font-bold text-foreground">{txCount} عملية</p>
+          </div>
         </div>
 
-        <div className="bg-card border border-border rounded-2xl p-8 shadow-card text-center">
-          <p className="text-muted-foreground font-ibm">لا توجد عمليات سابقة حتى الآن</p>
+        <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
+          <h2 className="font-cairo font-bold text-foreground text-lg mb-4">سجل العمليات</h2>
+          {user && <TransactionList userId={user.id} role="customer" />}
         </div>
       </main>
     </div>
