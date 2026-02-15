@@ -6,6 +6,7 @@ import { Store, DollarSign, Users, LogOut } from "lucide-react";
 import jiwarLogo from "@/assets/jiwar-logo.png";
 import QRScanner from "./QRScanner";
 import TransactionList from "./TransactionList";
+import NotificationBell from "./NotificationBell";
 
 const MerchantDashboard = () => {
   const { user, signOut } = useAuth();
@@ -50,10 +51,13 @@ const MerchantDashboard = () => {
             <p className="text-sm text-muted-foreground font-ibm">{profile?.full_name}</p>
           </div>
         </div>
-        <Button variant="ghost" size="sm" onClick={signOut} className="text-muted-foreground">
-          <LogOut className="w-4 h-4 ml-2" />
-          خروج
-        </Button>
+        <div className="flex items-center gap-2">
+          <NotificationBell />
+          <Button variant="ghost" size="sm" onClick={signOut} className="text-muted-foreground">
+            <LogOut className="w-4 h-4 ml-2" />
+            خروج
+          </Button>
+        </div>
       </header>
 
       <main className="container mx-auto px-6 py-8">
