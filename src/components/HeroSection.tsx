@@ -9,8 +9,8 @@ const HeroSection = () => {
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
       {/* Background */}
       <div className="absolute inset-0">
-        <img src={heroBg} alt="" className="w-full h-full object-cover opacity-60" />
-        <div className="absolute inset-0 bg-gradient-hero opacity-80" />
+        <img src={heroBg} alt="" className="w-full h-full object-cover opacity-15" />
+        <div className="absolute inset-0 bg-gradient-hero" />
       </div>
 
       {/* Glow effect */}
@@ -55,7 +55,7 @@ const HeroSection = () => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.6 + i * 0.15 }}
-                className="flex items-center gap-2 bg-muted/50 border-glow rounded-full px-5 py-2.5 text-sm text-foreground"
+                className="flex items-center gap-2 bg-card border-glow rounded-full px-5 py-2.5 text-sm text-foreground shadow-sm"
               >
                 <item.icon className="w-4 h-4 text-primary" />
                 <span>{item.text}</span>
