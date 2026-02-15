@@ -28,9 +28,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const { data } = await supabase
       .from("user_roles")
       .select("role")
-      .eq("user_id", userId)
-      .single();
-    setRole(data?.role ?? null);
+      .eq("user_id", userId);
+    if (data && data.length > 0) {
+      // Prioritize: admin > merchant > customer
+      const priorities = ["admin", "merchant", "customer"];
+      const sorted = data.sort((a, b) => priorities.indexOf(a.role) - priorities.indexOf(b.role));
+      setRole(sorted[0].role);
+    } else {
+      setRole(null);
+    }
   };
 
   useEffect(() => {
