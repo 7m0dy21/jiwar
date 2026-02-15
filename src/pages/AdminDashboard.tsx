@@ -7,8 +7,9 @@ import AdminOverview from "@/components/admin/AdminOverview";
 import AdminMerchants from "@/components/admin/AdminMerchants";
 import AdminCustomers from "@/components/admin/AdminCustomers";
 import AdminTransactions from "@/components/admin/AdminTransactions";
+import AdminManagers from "@/components/admin/AdminManagers";
 
-type AdminTab = "overview" | "merchants" | "customers" | "transactions";
+type AdminTab = "overview" | "merchants" | "customers" | "transactions" | "managers";
 
 const AdminDashboard = () => {
   const { user, loading, role } = useAuth();
@@ -30,6 +31,7 @@ const AdminDashboard = () => {
       case "merchants": return <AdminMerchants />;
       case "customers": return <AdminCustomers />;
       case "transactions": return <AdminTransactions />;
+      case "managers": return <AdminManagers />;
     }
   };
 
