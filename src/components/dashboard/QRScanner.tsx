@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ScanLine } from "lucide-react";
+import { ScanLine, Camera } from "lucide-react";
 import { toast } from "sonner";
+import { Html5Qrcode } from "html5-qrcode";
 
 interface QRScannerProps {
   merchantId: string;
@@ -19,14 +20,49 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
   const [loading, setLoading] = useState(false);
   const [customerInfo, setCustomerInfo] = useState<any>(null);
   const [step, setStep] = useState<"scan" | "confirm">("scan");
+  const [cameraActive, setCameraActive] = useState(false);
+  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const scannerContainerRef = useRef<string>("qr-reader-" + Math.random().toString(36).slice(2));
 
-  const handleLookup = async () => {
-    if (!qrCode.trim()) return;
+  const startCamera = async () => {
+    try {
+      const scanner = new Html5Qrcode(scannerContainerRef.current);
+      scannerRef.current = scanner;
+
+      await scanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 250, height: 250 } },
+        (decodedText) => {
+          setQrCode(decodedText);
+          stopCamera();
+          // Auto-lookup after scan
+          handleLookupWithCode(decodedText);
+        },
+        () => {} // ignore errors during scanning
+      );
+      setCameraActive(true);
+    } catch (err) {
+      toast.error("لا يمكن الوصول إلى الكاميرا");
+      console.error("Camera error:", err);
+    }
+  };
+
+  const stopCamera = async () => {
+    if (scannerRef.current) {
+      try {
+        await scannerRef.current.stop();
+        scannerRef.current.clear();
+      } catch {}
+      scannerRef.current = null;
+    }
+    setCameraActive(false);
+  };
+
+  const handleLookupWithCode = async (code: string) => {
+    if (!code.trim()) return;
     setLoading(true);
     try {
-      // Extract customer ID from QR code (format: JIWAR-<uuid>)
-      const customerId = qrCode.replace("JIWAR-", "").trim();
-
+      const customerId = code.replace("JIWAR-", "").trim();
       const { data: custData, error: custError } = await supabase
         .from("customers")
         .select("id, available_balance, credit_limit, user_id")
@@ -38,7 +74,6 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
         return;
       }
 
-      // Get profile name
       const { data: profileData } = await supabase
         .from("profiles")
         .select("full_name")
@@ -54,12 +89,11 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
     }
   };
 
+  const handleLookup = () => handleLookupWithCode(qrCode);
+
   const handleProcess = async () => {
     const numAmount = parseFloat(amount);
-    if (!numAmount || numAmount <= 0) {
-      toast.error("أدخل مبلغاً صالحاً");
-      return;
-    }
+    if (!numAmount || numAmount <= 0) { toast.error("أدخل مبلغاً صالحاً"); return; }
     setLoading(true);
     try {
       const { data, error } = await supabase.rpc("process_transaction", {
@@ -68,11 +102,7 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
         p_amount: numAmount,
       });
 
-      if (error) {
-        toast.error(error.message);
-        return;
-      }
-
+      if (error) { toast.error(error.message); return; }
       toast.success(`تمت العملية بنجاح! رقم المعاملة: ${(data as string).slice(0, 8)}`);
       setOpen(false);
       resetState();
@@ -85,6 +115,7 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
   };
 
   const resetState = () => {
+    stopCamera();
     setQrCode("");
     setAmount("");
     setCustomerInfo(null);
@@ -102,21 +133,38 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
       <DialogContent className="max-w-sm">
         <DialogHeader>
           <DialogTitle className="font-cairo text-xl">
-            {step === "scan" ? "أدخل كود العميل" : "تأكيد العملية"}
+            {step === "scan" ? "مسح كود العميل" : "تأكيد العملية"}
           </DialogTitle>
         </DialogHeader>
 
         {step === "scan" ? (
           <div className="space-y-4 py-4">
+            {/* Camera scanner area */}
+            <div className="relative rounded-xl overflow-hidden bg-muted" style={{ minHeight: cameraActive ? 280 : 0 }}>
+              <div id={scannerContainerRef.current} />
+            </div>
+
+            {!cameraActive && (
+              <Button onClick={startCamera} variant="outline" className="w-full font-cairo gap-2">
+                <Camera className="w-4 h-4" />
+                فتح الكاميرا للمسح
+              </Button>
+            )}
+
+            {cameraActive && (
+              <Button onClick={stopCamera} variant="outline" className="w-full font-cairo text-destructive">
+                إيقاف الكاميرا
+              </Button>
+            )}
+
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-border" /></div>
+              <div className="relative flex justify-center text-xs"><span className="bg-background px-2 text-muted-foreground font-ibm">أو أدخل الكود يدوياً</span></div>
+            </div>
+
             <div>
               <Label className="font-cairo">كود QR الخاص بالعميل</Label>
-              <Input
-                value={qrCode}
-                onChange={(e) => setQrCode(e.target.value)}
-                placeholder="JIWAR-xxxxxxxx"
-                dir="ltr"
-                className="mt-1"
-              />
+              <Input value={qrCode} onChange={(e) => setQrCode(e.target.value)} placeholder="JIWAR-xxxxxxxx" dir="ltr" className="mt-1" />
             </div>
             <Button onClick={handleLookup} disabled={loading} className="w-full bg-gradient-primary text-primary-foreground">
               {loading ? "جارٍ البحث..." : "بحث عن العميل"}
@@ -126,25 +174,12 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
           <div className="space-y-4 py-4">
             <div className="bg-muted rounded-xl p-4 text-center">
               <p className="text-sm text-muted-foreground font-ibm">العميل</p>
-              <p className="font-cairo font-bold text-foreground text-lg">
-                {customerInfo?.full_name || "عميل"}
-              </p>
-              <p className="text-sm text-primary font-ibm mt-1">
-                الرصيد المتاح: {customerInfo?.available_balance} ر.س
-              </p>
+              <p className="font-cairo font-bold text-foreground text-lg">{customerInfo?.full_name || "عميل"}</p>
+              <p className="text-sm text-primary font-ibm mt-1">الرصيد المتاح: {customerInfo?.available_balance} ر.س</p>
             </div>
             <div>
               <Label className="font-cairo">المبلغ (ر.س)</Label>
-              <Input
-                type="number"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                placeholder="0.00"
-                dir="ltr"
-                className="mt-1 text-center text-2xl font-bold"
-                min="0.01"
-                step="0.01"
-              />
+              <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" dir="ltr" className="mt-1 text-center text-2xl font-bold" min="0.01" step="0.01" />
             </div>
             <div className="flex gap-2">
               <Button variant="outline" onClick={() => setStep("scan")} className="flex-1">رجوع</Button>
