@@ -8,6 +8,7 @@ import QRDisplay from "./QRDisplay";
 import TransactionList from "./TransactionList";
 import NotificationBell from "./NotificationBell";
 import PaymentDialog from "./PaymentDialog";
+import NearbyMerchants from "./NearbyMerchants";
 
 const CustomerDashboard = () => {
   const { user, signOut } = useAuth();
@@ -119,10 +120,12 @@ const CustomerDashboard = () => {
           </div>
         </div>
 
-        <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
+        <div className="bg-card border border-border rounded-2xl p-6 shadow-card mb-8">
           <h2 className="font-cairo font-bold text-foreground text-lg mb-4">سجل العمليات</h2>
           {user && <TransactionList userId={user.id} role="customer" refreshKey={refreshKey} />}
         </div>
+
+        <NearbyMerchants />
       </main>
     </div>
   );
