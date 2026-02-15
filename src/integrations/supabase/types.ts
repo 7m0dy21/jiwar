@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_permissions: {
+        Row: {
+          can_manage_admins: boolean
+          can_manage_customers: boolean
+          can_manage_merchants: boolean
+          can_manage_transactions: boolean
+          can_view_reports: boolean
+          created_at: string
+          created_by: string | null
+          id: string
+          is_super_admin: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          can_manage_admins?: boolean
+          can_manage_customers?: boolean
+          can_manage_merchants?: boolean
+          can_manage_transactions?: boolean
+          can_view_reports?: boolean
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_super_admin?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          can_manage_admins?: boolean
+          can_manage_customers?: boolean
+          can_manage_merchants?: boolean
+          can_manage_transactions?: boolean
+          can_view_reports?: boolean
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_super_admin?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       customers: {
         Row: {
           available_balance: number
