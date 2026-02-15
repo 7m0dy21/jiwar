@@ -19,14 +19,17 @@ const AdminCustomers = () => {
 
   const load = async () => {
     setLoading(true);
-    const [{ data: customersData }, { data: profilesData }] = await Promise.all([
+    const [customersRes, profilesRes] = await Promise.all([
       supabase.from("customers").select("*").order("created_at", { ascending: false }),
       supabase.from("profiles").select("user_id, full_name, phone, national_id"),
     ]);
 
-    setCustomers(customersData || []);
+    console.log("Customers query result:", customersRes.data?.length, "error:", customersRes.error?.message);
+    console.log("Profiles query result:", profilesRes.data?.length, "error:", profilesRes.error?.message);
+
+    setCustomers(customersRes.data || []);
     const profileMap = new Map(
-      (profilesData || []).map((p) => [p.user_id, p])
+      (profilesRes.data || []).map((p) => [p.user_id, p])
     );
     setProfiles(profileMap);
     setLoading(false);
