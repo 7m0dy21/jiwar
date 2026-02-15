@@ -4,16 +4,17 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Pencil } from "lucide-react";
+import { Pencil, Trash2, ShieldCheck, ShieldX } from "lucide-react";
 
 const AdminCustomers = () => {
   const [customers, setCustomers] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<Map<string, any>>(new Map());
   const [loading, setLoading] = useState(true);
   const [editCustomer, setEditCustomer] = useState<any>(null);
+  const [deleteCustomer, setDeleteCustomer] = useState<any>(null);
   const [newCreditLimit, setNewCreditLimit] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -23,9 +24,6 @@ const AdminCustomers = () => {
       supabase.from("customers").select("*").order("created_at", { ascending: false }),
       supabase.from("profiles").select("user_id, full_name, phone, national_id"),
     ]);
-
-    console.log("Customers query result:", customersRes.data?.length, "error:", customersRes.error?.message);
-    console.log("Profiles query result:", profilesRes.data?.length, "error:", profilesRes.error?.message);
 
     setCustomers(customersRes.data || []);
     const profileMap = new Map(
@@ -57,19 +55,46 @@ const AdminCustomers = () => {
 
     const { error } = await supabase
       .from("customers")
-      .update({
-        credit_limit: limit,
-        available_balance: Math.max(0, newBalance),
-      })
+      .update({ credit_limit: limit, available_balance: Math.max(0, newBalance) })
       .eq("id", editCustomer.id);
 
     setSaving(false);
-    if (error) {
-      toast.error("حدث خطأ أثناء التحديث");
-      return;
-    }
+    if (error) { toast.error("حدث خطأ أثناء التحديث"); return; }
     toast.success(`تم تحديث الحد الائتماني إلى ${limit} ر.س`);
     setEditCustomer(null);
+    load();
+  };
+
+  const toggleVerify = async (customer: any) => {
+    const { error } = await supabase
+      .from("customers")
+      .update({ is_verified: !customer.is_verified })
+      .eq("id", customer.id);
+
+    if (error) { toast.error("حدث خطأ"); return; }
+    toast.success(customer.is_verified ? "تم إلغاء التوثيق" : "تم توثيق العميل ✅");
+    load();
+  };
+
+  const handleDelete = async () => {
+    if (!deleteCustomer) return;
+    setSaving(true);
+
+    // Delete related data first, then customer, profile, roles
+    const userId = deleteCustomer.user_id;
+    const customerId = deleteCustomer.id;
+
+    await supabase.from("transactions").delete().eq("customer_id", customerId);
+    await supabase.from("payments").delete().eq("customer_id", customerId);
+    await supabase.from("monthly_statements").delete().eq("customer_id", customerId);
+    await supabase.from("notifications").delete().eq("user_id", userId);
+    await supabase.from("customers").delete().eq("id", customerId);
+    await supabase.from("user_roles").delete().eq("user_id", userId);
+    await supabase.from("profiles").delete().eq("user_id", userId);
+
+    setSaving(false);
+    toast.success("تم حذف العميل بنجاح");
+    setDeleteCustomer(null);
     load();
   };
 
@@ -99,7 +124,7 @@ const AdminCustomers = () => {
                   <th className="text-right py-3 px-4">الرصيد المتاح</th>
                   <th className="text-right py-3 px-4">المستحق</th>
                   <th className="text-right py-3 px-4">التحقق</th>
-                  <th className="text-right py-3 px-4">إجراء</th>
+                  <th className="text-right py-3 px-4">إجراءات</th>
                 </tr>
               </thead>
               <tbody>
@@ -118,20 +143,22 @@ const AdminCustomers = () => {
                         </span>
                       </td>
                       <td className="py-3 px-4">
-                        <Badge variant={c.is_verified ? "default" : "outline"} className="font-cairo">
+                        <Badge variant={c.is_verified ? "default" : "outline"} className="font-cairo cursor-pointer" onClick={() => toggleVerify(c)}>
                           {c.is_verified ? "موثّق" : "غير موثّق"}
                         </Badge>
                       </td>
                       <td className="py-3 px-4">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => openEditDialog(c)}
-                          className="font-cairo text-xs gap-1"
-                        >
-                          <Pencil className="h-3 w-3" />
-                          تعديل الحد
-                        </Button>
+                        <div className="flex gap-1">
+                          <Button size="sm" variant="outline" onClick={() => toggleVerify(c)} className="font-cairo text-xs gap-1" title={c.is_verified ? "إلغاء التوثيق" : "توثيق"}>
+                            {c.is_verified ? <ShieldX className="h-3 w-3" /> : <ShieldCheck className="h-3 w-3" />}
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => openEditDialog(c)} className="font-cairo text-xs gap-1" title="تعديل الحد">
+                            <Pencil className="h-3 w-3" />
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => setDeleteCustomer(c)} className="font-cairo text-xs gap-1 text-destructive hover:text-destructive" title="حذف">
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -142,6 +169,7 @@ const AdminCustomers = () => {
         </div>
       )}
 
+      {/* Edit Credit Limit Dialog */}
       <Dialog open={!!editCustomer} onOpenChange={(open) => !open && setEditCustomer(null)}>
         <DialogContent className="sm:max-w-md" dir="rtl">
           <DialogHeader>
@@ -157,28 +185,37 @@ const AdminCustomers = () => {
               </p>
               <div>
                 <Label htmlFor="creditLimit" className="font-cairo">الحد الائتماني الجديد (ر.س)</Label>
-                <Input
-                  id="creditLimit"
-                  type="number"
-                  min="0"
-                  value={newCreditLimit}
-                  onChange={(e) => setNewCreditLimit(e.target.value)}
-                  className="mt-1"
-                  dir="ltr"
-                />
+                <Input id="creditLimit" type="number" min="0" value={newCreditLimit} onChange={(e) => setNewCreditLimit(e.target.value)} className="mt-1" dir="ltr" />
               </div>
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditCustomer(null)} className="font-cairo">
-              إلغاء
-            </Button>
-            <Button
-              onClick={handleSaveCreditLimit}
-              disabled={saving}
-              className="bg-gradient-primary text-primary-foreground font-cairo"
-            >
+            <Button variant="outline" onClick={() => setEditCustomer(null)} className="font-cairo">إلغاء</Button>
+            <Button onClick={handleSaveCreditLimit} disabled={saving} className="bg-gradient-primary text-primary-foreground font-cairo">
               {saving ? "جارٍ الحفظ..." : "حفظ"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deleteCustomer} onOpenChange={(open) => !open && setDeleteCustomer(null)}>
+        <DialogContent className="sm:max-w-md" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="font-cairo text-destructive">تأكيد حذف العميل</DialogTitle>
+            <DialogDescription className="font-ibm">
+              سيتم حذف العميل وجميع بياناته (المعاملات، المدفوعات، الكشوفات). هذا الإجراء لا يمكن التراجع عنه.
+            </DialogDescription>
+          </DialogHeader>
+          {deleteCustomer && (
+            <p className="text-sm font-ibm">
+              العميل: <span className="font-cairo font-bold text-foreground">{profiles.get(deleteCustomer.user_id)?.full_name || "—"}</span>
+            </p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteCustomer(null)} className="font-cairo">إلغاء</Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={saving} className="font-cairo">
+              {saving ? "جارٍ الحذف..." : "حذف نهائي"}
             </Button>
           </DialogFooter>
         </DialogContent>
