@@ -7,29 +7,43 @@ import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Pencil, Trash2, ShieldCheck, ShieldX } from "lucide-react";
+import { Pencil, Trash2, ShieldCheck, ShieldX, UserPlus, DollarSign, Ban, CheckCircle } from "lucide-react";
 
 const AdminCustomers = () => {
   const [customers, setCustomers] = useState<any[]>([]);
   const [profiles, setProfiles] = useState<Map<string, any>>(new Map());
+  const [emails, setEmails] = useState<Map<string, string>>(new Map());
   const [loading, setLoading] = useState(true);
   const [editCustomer, setEditCustomer] = useState<any>(null);
   const [deleteCustomer, setDeleteCustomer] = useState<any>(null);
+  const [transferCustomer, setTransferCustomer] = useState<any>(null);
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [newCreditLimit, setNewCreditLimit] = useState("");
+  const [transferAmount, setTransferAmount] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Add customer form
+  const [newCustomer, setNewCustomer] = useState({ email: "", password: "", fullName: "", phone: "", creditLimit: "500" });
 
   const load = async () => {
     setLoading(true);
-    const [customersRes, profilesRes] = await Promise.all([
+    const [customersRes, profilesRes, emailsRes] = await Promise.all([
       supabase.from("customers").select("*").order("created_at", { ascending: false }),
       supabase.from("profiles").select("user_id, full_name, phone, national_id"),
+      supabase.functions.invoke("list-user-emails"),
     ]);
 
     setCustomers(customersRes.data || []);
-    const profileMap = new Map(
-      (profilesRes.data || []).map((p) => [p.user_id, p])
-    );
+    const profileMap = new Map((profilesRes.data || []).map((p) => [p.user_id, p]));
     setProfiles(profileMap);
+
+    const emailMap = new Map<string, string>();
+    if (emailsRes.data?.emails) {
+      for (const [uid, email] of Object.entries(emailsRes.data.emails as Record<string, string>)) {
+        emailMap.set(uid, email);
+      }
+    }
+    setEmails(emailMap);
     setLoading(false);
   };
 
@@ -43,10 +57,7 @@ const AdminCustomers = () => {
   const handleSaveCreditLimit = async () => {
     if (!editCustomer) return;
     const limit = Number(newCreditLimit);
-    if (isNaN(limit) || limit < 0) {
-      toast.error("يرجى إدخال مبلغ صحيح");
-      return;
-    }
+    if (isNaN(limit) || limit < 0) { toast.error("يرجى إدخال مبلغ صحيح"); return; }
 
     setSaving(true);
     const oldLimit = Number(editCustomer.credit_limit);
@@ -66,21 +77,77 @@ const AdminCustomers = () => {
   };
 
   const toggleVerify = async (customer: any) => {
-    const { error } = await supabase
-      .from("customers")
-      .update({ is_verified: !customer.is_verified })
-      .eq("id", customer.id);
-
+    const { error } = await supabase.from("customers").update({ is_verified: !customer.is_verified }).eq("id", customer.id);
     if (error) { toast.error("حدث خطأ"); return; }
     toast.success(customer.is_verified ? "تم إلغاء التوثيق" : "تم توثيق العميل ✅");
     load();
   };
 
+  const toggleSuspend = async (customer: any) => {
+    // Use credit_limit = 0 and available_balance = 0 to effectively suspend
+    // Or we add a suspended concept - let's use is_verified as active/suspended toggle
+    // Actually, let's just set available_balance to 0 to suspend, and restore on activate
+    // Better: we'll store the original balance in a notification or just toggle is_verified
+    // For simplicity, toggling is_verified serves as account active/suspended
+    const { error } = await supabase.from("customers").update({ is_verified: !customer.is_verified }).eq("id", customer.id);
+    if (error) { toast.error("حدث خطأ"); return; }
+    toast.success(customer.is_verified ? "تم إيقاف الحساب" : "تم تفعيل الحساب");
+    load();
+  };
+
+  const handleTransfer = async () => {
+    if (!transferCustomer) return;
+    const amt = Number(transferAmount);
+    if (isNaN(amt) || amt <= 0) { toast.error("أدخل مبلغاً صالحاً"); return; }
+
+    setSaving(true);
+    // Add to available balance (like a payment/credit)
+    const newBal = Number(transferCustomer.available_balance) + amt;
+    const maxBal = Number(transferCustomer.credit_limit);
+
+    const { error } = await supabase
+      .from("customers")
+      .update({ available_balance: Math.min(newBal, maxBal) })
+      .eq("id", transferCustomer.id);
+
+    setSaving(false);
+    if (error) { toast.error("حدث خطأ"); return; }
+    toast.success(`تم تحويل ${amt} ر.س للعميل`);
+    setTransferCustomer(null);
+    setTransferAmount("");
+    load();
+  };
+
+  const handleAddCustomer = async () => {
+    if (!newCustomer.email || !newCustomer.password || !newCustomer.fullName) {
+      toast.error("يرجى ملء جميع الحقول المطلوبة");
+      return;
+    }
+    setSaving(true);
+
+    const { error } = await supabase.auth.signUp({
+      email: newCustomer.email.trim(),
+      password: newCustomer.password,
+      options: {
+        data: {
+          full_name: newCustomer.fullName.trim(),
+          phone: newCustomer.phone.trim(),
+          role: "customer",
+        },
+      },
+    });
+
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("تم إضافة العميل بنجاح");
+    setAddDialogOpen(false);
+    setNewCustomer({ email: "", password: "", fullName: "", phone: "", creditLimit: "500" });
+    setTimeout(() => load(), 1000);
+  };
+
   const handleDelete = async () => {
     if (!deleteCustomer) return;
     setSaving(true);
-
-    // Delete related data first, then customer, profile, roles
     const userId = deleteCustomer.user_id;
     const customerId = deleteCustomer.id;
 
@@ -100,10 +167,13 @@ const AdminCustomers = () => {
 
   return (
     <div className="p-6 md:p-8">
-      <div className="flex items-center gap-3 mb-8">
+      <div className="flex items-center gap-3 mb-8 flex-wrap">
         <SidebarTrigger />
         <h1 className="text-2xl font-cairo font-bold text-foreground">إدارة العملاء</h1>
         <Badge variant="secondary" className="font-cairo">{customers.length} عميل</Badge>
+        <Button onClick={() => setAddDialogOpen(true)} className="mr-auto bg-gradient-primary text-primary-foreground font-cairo gap-1">
+          <UserPlus className="h-4 w-4" /> إضافة عميل
+        </Button>
       </div>
 
       {loading ? (
@@ -120,10 +190,11 @@ const AdminCustomers = () => {
                 <tr className="border-b border-border bg-muted/30 text-muted-foreground font-ibm">
                   <th className="text-right py-3 px-4">الاسم</th>
                   <th className="text-right py-3 px-4">الجوال</th>
+                  <th className="text-right py-3 px-4">البريد</th>
                   <th className="text-right py-3 px-4">الحد الائتماني</th>
                   <th className="text-right py-3 px-4">الرصيد المتاح</th>
                   <th className="text-right py-3 px-4">المستحق</th>
-                  <th className="text-right py-3 px-4">التحقق</th>
+                  <th className="text-right py-3 px-4">الحالة</th>
                   <th className="text-right py-3 px-4">إجراءات</th>
                 </tr>
               </thead>
@@ -135,25 +206,27 @@ const AdminCustomers = () => {
                     <tr key={c.id} className="border-b border-border/50 hover:bg-muted/20">
                       <td className="py-3 px-4 font-cairo font-bold text-foreground">{profile?.full_name || "—"}</td>
                       <td className="py-3 px-4 font-ibm text-muted-foreground" dir="ltr">{profile?.phone || "—"}</td>
+                      <td className="py-3 px-4 font-ibm text-muted-foreground text-xs" dir="ltr">{emails.get(c.user_id) || "—"}</td>
                       <td className="py-3 px-4 font-cairo text-foreground">{c.credit_limit} ر.س</td>
                       <td className="py-3 px-4 font-cairo text-primary font-bold">{c.available_balance} ر.س</td>
                       <td className="py-3 px-4 font-cairo">
-                        <span className={owed > 0 ? "text-destructive font-bold" : "text-muted-foreground"}>
-                          {owed} ر.س
-                        </span>
+                        <span className={owed > 0 ? "text-destructive font-bold" : "text-muted-foreground"}>{owed} ر.س</span>
                       </td>
                       <td className="py-3 px-4">
-                        <Badge variant={c.is_verified ? "default" : "outline"} className="font-cairo cursor-pointer" onClick={() => toggleVerify(c)}>
+                        <Badge variant={c.is_verified ? "default" : "outline"} className="font-cairo">
                           {c.is_verified ? "موثّق" : "غير موثّق"}
                         </Badge>
                       </td>
                       <td className="py-3 px-4">
-                        <div className="flex gap-1">
+                        <div className="flex gap-1 flex-wrap">
                           <Button size="sm" variant="outline" onClick={() => toggleVerify(c)} className="font-cairo text-xs gap-1" title={c.is_verified ? "إلغاء التوثيق" : "توثيق"}>
                             {c.is_verified ? <ShieldX className="h-3 w-3" /> : <ShieldCheck className="h-3 w-3" />}
                           </Button>
                           <Button size="sm" variant="outline" onClick={() => openEditDialog(c)} className="font-cairo text-xs gap-1" title="تعديل الحد">
                             <Pencil className="h-3 w-3" />
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => { setTransferCustomer(c); setTransferAmount(""); }} className="font-cairo text-xs gap-1 text-primary" title="تحويل مبلغ">
+                            <DollarSign className="h-3 w-3" />
                           </Button>
                           <Button size="sm" variant="outline" onClick={() => setDeleteCustomer(c)} className="font-cairo text-xs gap-1 text-destructive hover:text-destructive" title="حذف">
                             <Trash2 className="h-3 w-3" />
@@ -168,6 +241,39 @@ const AdminCustomers = () => {
           </div>
         </div>
       )}
+
+      {/* Add Customer Dialog */}
+      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+        <DialogContent className="sm:max-w-md" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="font-cairo">إضافة عميل جديد</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label className="font-cairo">الاسم الكامل *</Label>
+              <Input value={newCustomer.fullName} onChange={(e) => setNewCustomer(p => ({ ...p, fullName: e.target.value }))} className="mt-1" />
+            </div>
+            <div>
+              <Label className="font-cairo">البريد الإلكتروني *</Label>
+              <Input type="email" value={newCustomer.email} onChange={(e) => setNewCustomer(p => ({ ...p, email: e.target.value }))} className="mt-1" dir="ltr" />
+            </div>
+            <div>
+              <Label className="font-cairo">كلمة المرور *</Label>
+              <Input type="password" value={newCustomer.password} onChange={(e) => setNewCustomer(p => ({ ...p, password: e.target.value }))} className="mt-1" dir="ltr" />
+            </div>
+            <div>
+              <Label className="font-cairo">رقم الجوال</Label>
+              <Input value={newCustomer.phone} onChange={(e) => setNewCustomer(p => ({ ...p, phone: e.target.value }))} className="mt-1" dir="ltr" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddDialogOpen(false)} className="font-cairo">إلغاء</Button>
+            <Button onClick={handleAddCustomer} disabled={saving} className="bg-gradient-primary text-primary-foreground font-cairo">
+              {saving ? "جارٍ الإضافة..." : "إضافة"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Credit Limit Dialog */}
       <Dialog open={!!editCustomer} onOpenChange={(open) => !open && setEditCustomer(null)}>
@@ -198,13 +304,44 @@ const AdminCustomers = () => {
         </DialogContent>
       </Dialog>
 
+      {/* Transfer Dialog */}
+      <Dialog open={!!transferCustomer} onOpenChange={(open) => !open && setTransferCustomer(null)}>
+        <DialogContent className="sm:max-w-md" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="font-cairo">تحويل مبلغ للعميل</DialogTitle>
+          </DialogHeader>
+          {transferCustomer && (
+            <div className="space-y-4">
+              <p className="text-sm font-ibm">
+                العميل: <span className="font-cairo font-bold text-foreground">{profiles.get(transferCustomer.user_id)?.full_name || "—"}</span>
+              </p>
+              <p className="text-sm font-ibm text-muted-foreground">
+                الرصيد الحالي: <span className="font-bold text-primary">{transferCustomer.available_balance} ر.س</span>
+                {" / "}
+                الحد: <span className="font-bold">{transferCustomer.credit_limit} ر.س</span>
+              </p>
+              <div>
+                <Label className="font-cairo">المبلغ (ر.س)</Label>
+                <Input type="number" min="0" value={transferAmount} onChange={(e) => setTransferAmount(e.target.value)} className="mt-1" dir="ltr" />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTransferCustomer(null)} className="font-cairo">إلغاء</Button>
+            <Button onClick={handleTransfer} disabled={saving} className="bg-gradient-primary text-primary-foreground font-cairo">
+              {saving ? "جارٍ التحويل..." : "تحويل"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Delete Confirmation Dialog */}
       <Dialog open={!!deleteCustomer} onOpenChange={(open) => !open && setDeleteCustomer(null)}>
         <DialogContent className="sm:max-w-md" dir="rtl">
           <DialogHeader>
             <DialogTitle className="font-cairo text-destructive">تأكيد حذف العميل</DialogTitle>
             <DialogDescription className="font-ibm">
-              سيتم حذف العميل وجميع بياناته (المعاملات، المدفوعات، الكشوفات). هذا الإجراء لا يمكن التراجع عنه.
+              سيتم حذف العميل وجميع بياناته. هذا الإجراء لا يمكن التراجع عنه.
             </DialogDescription>
           </DialogHeader>
           {deleteCustomer && (
