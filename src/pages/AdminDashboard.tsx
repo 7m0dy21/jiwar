@@ -8,8 +8,9 @@ import AdminMerchants from "@/components/admin/AdminMerchants";
 import AdminCustomers from "@/components/admin/AdminCustomers";
 import AdminTransactions from "@/components/admin/AdminTransactions";
 import AdminManagers from "@/components/admin/AdminManagers";
+import AdminRiskDashboard from "@/components/admin/AdminRiskDashboard";
 
-type AdminTab = "overview" | "merchants" | "customers" | "transactions" | "managers";
+type AdminTab = "overview" | "merchants" | "customers" | "transactions" | "managers" | "risk";
 
 const AdminDashboard = () => {
   const { user, loading, role } = useAuth();
@@ -31,6 +32,7 @@ const AdminDashboard = () => {
       case "merchants": return <AdminMerchants />;
       case "customers": return <AdminCustomers />;
       case "transactions": return <AdminTransactions />;
+      case "risk": return <div className="p-6"><AdminRiskDashboard /></div>;
       case "managers": return <AdminManagers />;
     }
   };
