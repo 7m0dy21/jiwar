@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Wallet, Receipt, LogOut } from "lucide-react";
 import jiwarLogo from "@/assets/jiwar-logo.png";
 import QRDisplay from "./QRDisplay";
+import DynamicQR from "./DynamicQR";
+import OnboardingFlow from "./OnboardingFlow";
 import TransactionList from "./TransactionList";
 import NotificationBell from "./NotificationBell";
 import PaymentDialog from "./PaymentDialog";
@@ -87,6 +89,21 @@ const CustomerDashboard = () => {
           </div>
         </div>
 
+        {/* Onboarding gate */}
+        {customer && !customer.onboarding_completed && (
+          <div className="mb-6">
+            <OnboardingFlow
+              customerId={customer.id}
+              status={{
+                nafath: !!customer.nafath_verified,
+                simah: !!customer.simah_score,
+                nafith: !!customer.nafith_signed,
+              }}
+              onComplete={reload}
+            />
+          </div>
+        )}
+
         {/* Payment button */}
         {customer && (
           <div className="mb-8">
@@ -95,7 +112,8 @@ const CustomerDashboard = () => {
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
+          <div className="bg-card border border-border rounded-2xl p-6 shadow-card space-y-2">
+            <DynamicQR customerName={profile?.full_name || "عميل"} />
             {customer?.qr_code && (
               <QRDisplay qrCode={customer.qr_code} name={profile?.full_name || "عميل"} />
             )}
