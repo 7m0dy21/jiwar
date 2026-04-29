@@ -56,6 +56,39 @@ export type Database = {
         }
         Relationships: []
       }
+      customer_verifications: {
+        Row: {
+          created_at: string
+          customer_id: string
+          details: Json | null
+          id: string
+          provider: string
+          reference: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          customer_id: string
+          details?: Json | null
+          id?: string
+          provider: string
+          reference?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string
+          details?: Json | null
+          id?: string
+          provider?: string
+          reference?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       customers: {
         Row: {
           available_balance: number
@@ -63,7 +96,11 @@ export type Database = {
           credit_limit: number
           id: string
           is_verified: boolean
+          nafath_verified: boolean
+          nafith_signed: boolean
+          onboarding_completed: boolean
           qr_code: string | null
+          simah_score: number | null
           updated_at: string
           user_id: string
         }
@@ -73,7 +110,11 @@ export type Database = {
           credit_limit?: number
           id?: string
           is_verified?: boolean
+          nafath_verified?: boolean
+          nafith_signed?: boolean
+          onboarding_completed?: boolean
           qr_code?: string | null
+          simah_score?: number | null
           updated_at?: string
           user_id: string
         }
@@ -83,9 +124,76 @@ export type Database = {
           credit_limit?: number
           id?: string
           is_verified?: boolean
+          nafath_verified?: boolean
+          nafith_signed?: boolean
+          onboarding_completed?: boolean
           qr_code?: string | null
+          simah_score?: number | null
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      merchant_risk_alerts: {
+        Row: {
+          created_at: string
+          id: string
+          level: string
+          merchant_id: string
+          message: string
+          resolved: boolean
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          level: string
+          merchant_id: string
+          message: string
+          resolved?: boolean
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          level?: string
+          merchant_id?: string
+          message?: string
+          resolved?: boolean
+        }
+        Relationships: []
+      }
+      merchant_risk_scores: {
+        Row: {
+          failed_count: number
+          id: string
+          level: string
+          merchant_id: string
+          reason: string | null
+          score: number
+          total_transactions: number
+          total_volume: number
+          updated_at: string
+        }
+        Insert: {
+          failed_count?: number
+          id?: string
+          level?: string
+          merchant_id: string
+          reason?: string | null
+          score?: number
+          total_transactions?: number
+          total_volume?: number
+          updated_at?: string
+        }
+        Update: {
+          failed_count?: number
+          id?: string
+          level?: string
+          merchant_id?: string
+          reason?: string | null
+          score?: number
+          total_transactions?: number
+          total_volume?: number
+          updated_at?: string
         }
         Relationships: []
       }
@@ -454,9 +562,21 @@ export type Database = {
         }
         Returns: string
       }
+      process_dynamic_qr_transaction: {
+        Args: {
+          p_amount: number
+          p_customer_id: string
+          p_merchant_user_id: string
+        }
+        Returns: string
+      }
       process_transaction: {
         Args: { p_amount: number; p_customer_id: string; p_merchant_id: string }
         Returns: string
+      }
+      recalculate_merchant_risk: {
+        Args: { p_merchant_id: string }
+        Returns: undefined
       }
     }
     Enums: {
