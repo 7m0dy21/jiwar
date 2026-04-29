@@ -62,23 +62,43 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
     if (!code.trim()) return;
     setLoading(true);
     try {
-      const customerId = code.replace("JIWAR-", "").trim();
+      const trimmed = code.trim();
+      // Detect dynamic v2 token: JIWARv2.<customerId>.<ts>.<sig>
+      if (trimmed.startsWith("JIWARv2.")) {
+        const parts = trimmed.split(".");
+        if (parts.length !== 4) { toast.error("كود غير صالح"); return; }
+        const customerId = parts[1];
+        const ts = parseInt(parts[2], 10);
+        const ageSec = Math.floor(Date.now() / 1000) - ts;
+        if (ageSec > 60) { toast.error("انتهت صلاحية الكود - اطلب من العميل تحديثه"); return; }
+
+        const { data: custData, error: custError } = await supabase
+          .from("customers")
+          .select("id, available_balance, credit_limit, user_id, onboarding_completed")
+          .eq("id", customerId)
+          .single();
+        if (custError || !custData) { toast.error("العميل غير موجود"); return; }
+        if (!custData.onboarding_completed) { toast.error("لم يكمل العميل التحقق بعد"); return; }
+
+        const { data: profileData } = await supabase
+          .from("profiles").select("full_name").eq("user_id", custData.user_id).single();
+        setCustomerInfo({ ...custData, full_name: profileData?.full_name || "عميل", _dynamicToken: trimmed });
+        setStep("confirm");
+        return;
+      }
+
+      // Legacy static format
+      const customerId = trimmed.replace("JIWAR-", "").trim();
       const { data: custData, error: custError } = await supabase
         .from("customers")
         .select("id, available_balance, credit_limit, user_id")
         .eq("id", customerId)
         .single();
 
-      if (custError || !custData) {
-        toast.error("كود غير صالح أو العميل غير موجود");
-        return;
-      }
+      if (custError || !custData) { toast.error("كود غير صالح أو العميل غير موجود"); return; }
 
       const { data: profileData } = await supabase
-        .from("profiles")
-        .select("full_name")
-        .eq("user_id", custData.user_id)
-        .single();
+        .from("profiles").select("full_name").eq("user_id", custData.user_id).single();
 
       setCustomerInfo({ ...custData, full_name: profileData?.full_name || "عميل" });
       setStep("confirm");
@@ -97,6 +117,17 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
     if (numAmount > customerInfo?.available_balance) { toast.error("المبلغ أكبر من رصيد العميل المتاح"); return; }
     setLoading(true);
     try {
+      // If dynamic token present, use secure edge function
+      if (customerInfo?._dynamicToken) {
+        const { data, error } = await supabase.functions.invoke("qr-pay", {
+          body: { action: "pay", token: customerInfo._dynamicToken, amount: numAmount },
+        });
+        if (error || data?.error) { toast.error(data?.error || error?.message || "فشل الدفع"); return; }
+        toast.success(`تمت العملية بنجاح! رقم: ${(data.transaction_id as string).slice(0, 8)}`);
+        setOpen(false); resetState(); onSuccess();
+        return;
+      }
+
       const { data, error } = await supabase.rpc("process_transaction", {
         p_customer_id: customerInfo.id,
         p_merchant_id: merchantId,
