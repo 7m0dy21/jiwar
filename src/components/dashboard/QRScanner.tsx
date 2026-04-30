@@ -111,18 +111,26 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
 
   const handleLookup = () => handleLookupWithCode(qrCode);
 
+  const [failureReason, setFailureReason] = useState<string>("");
+
   const handleProcess = async () => {
+    setFailureReason("");
     const numAmount = parseFloat(amount);
-    if (!numAmount || numAmount <= 0) { toast.error("أدخل مبلغاً صالحاً"); return; }
-    if (numAmount > customerInfo?.available_balance) { toast.error("المبلغ أكبر من رصيد العميل المتاح"); return; }
+    if (!numAmount || numAmount <= 0) { setFailureReason("أدخل مبلغاً صالحاً"); toast.error("أدخل مبلغاً صالحاً"); return; }
+    if (numAmount > customerInfo?.available_balance) {
+      setFailureReason(`المبلغ (${numAmount} ر.س) أكبر من رصيد العميل المتاح (${customerInfo?.available_balance} ر.س)`);
+      toast.error("المبلغ أكبر من رصيد العميل المتاح"); return;
+    }
     setLoading(true);
     try {
-      // If dynamic token present, use secure edge function
       if (customerInfo?._dynamicToken) {
         const { data, error } = await supabase.functions.invoke("qr-pay", {
           body: { action: "pay", token: customerInfo._dynamicToken, amount: numAmount },
         });
-        if (error || data?.error) { toast.error(data?.error || error?.message || "فشل الدفع"); return; }
+        if (error || data?.error) {
+          const msg = data?.error || error?.message || "فشل الدفع";
+          setFailureReason(msg); toast.error(msg); return;
+        }
         toast.success(`تمت العملية بنجاح! رقم: ${(data.transaction_id as string).slice(0, 8)}`);
         setOpen(false); resetState(); onSuccess();
         return;
@@ -134,13 +142,12 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
         p_amount: numAmount,
       });
 
-      if (error) { toast.error(error.message); return; }
+      if (error) { setFailureReason(error.message); toast.error(error.message); return; }
       toast.success(`تمت العملية بنجاح! رقم المعاملة: ${(data as string).slice(0, 8)}`);
-      setOpen(false);
-      resetState();
-      onSuccess();
-    } catch {
-      toast.error("حدث خطأ في تنفيذ العملية");
+      setOpen(false); resetState(); onSuccess();
+    } catch (e: any) {
+      const msg = e?.message || "حدث خطأ في تنفيذ العملية";
+      setFailureReason(msg); toast.error(msg);
     } finally {
       setLoading(false);
     }
