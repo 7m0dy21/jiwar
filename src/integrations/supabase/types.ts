@@ -442,6 +442,69 @@ export type Database = {
         }
         Relationships: []
       }
+      qr_audit_log: {
+        Row: {
+          amount: number | null
+          created_at: string
+          customer_id: string | null
+          event_type: string
+          id: string
+          merchant_id: string | null
+          metadata: Json | null
+          reason: string | null
+        }
+        Insert: {
+          amount?: number | null
+          created_at?: string
+          customer_id?: string | null
+          event_type: string
+          id?: string
+          merchant_id?: string | null
+          metadata?: Json | null
+          reason?: string | null
+        }
+        Update: {
+          amount?: number | null
+          created_at?: string
+          customer_id?: string | null
+          event_type?: string
+          id?: string
+          merchant_id?: string | null
+          metadata?: Json | null
+          reason?: string | null
+        }
+        Relationships: []
+      }
+      transaction_limits: {
+        Row: {
+          daily_limit: number
+          entity_id: string
+          entity_type: string
+          id: string
+          monthly_limit: number
+          per_transaction_limit: number
+          updated_at: string
+        }
+        Insert: {
+          daily_limit?: number
+          entity_id: string
+          entity_type: string
+          id?: string
+          monthly_limit?: number
+          per_transaction_limit?: number
+          updated_at?: string
+        }
+        Update: {
+          daily_limit?: number
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          monthly_limit?: number
+          per_transaction_limit?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       transactions: {
         Row: {
           amount: number
@@ -546,6 +609,14 @@ export type Database = {
       }
     }
     Functions: {
+      get_effective_limits: {
+        Args: { p_entity_id: string; p_entity_type: string }
+        Returns: {
+          daily: number
+          monthly: number
+          per_transaction: number
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -554,6 +625,17 @@ export type Database = {
         Returns: boolean
       }
       is_super_admin: { Args: { _user_id: string }; Returns: boolean }
+      log_qr_audit: {
+        Args: {
+          p_amount?: number
+          p_customer_id: string
+          p_event: string
+          p_merchant_id: string
+          p_metadata?: Json
+          p_reason?: string
+        }
+        Returns: string
+      }
       make_payment: {
         Args: {
           p_amount: number
