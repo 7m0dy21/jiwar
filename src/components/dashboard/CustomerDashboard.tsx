@@ -144,6 +144,12 @@ const CustomerDashboard = () => {
           {user && <TransactionList userId={user.id} role="customer" refreshKey={refreshKey} />}
         </div>
 
+        {customer && (
+          <div className="mb-8">
+            <QRAuditLog scope="customer" entityId={customer.id} />
+          </div>
+        )}
+
         <NearbyMerchants />
       </main>
     </div>
