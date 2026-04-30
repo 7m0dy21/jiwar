@@ -10,6 +10,8 @@ import jiwarLogo from "@/assets/jiwar-logo.png";
 import QRScanner from "./QRScanner";
 import TransactionList from "./TransactionList";
 import NotificationBell from "./NotificationBell";
+import MerchantSettlementsPanel from "./MerchantSettlementsPanel";
+import QRAuditLog from "./QRAuditLog";
 import { toast } from "sonner";
 
 const MerchantDashboard = () => {
