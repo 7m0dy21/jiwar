@@ -11,6 +11,7 @@ import TransactionList from "./TransactionList";
 import NotificationBell from "./NotificationBell";
 import PaymentDialog from "./PaymentDialog";
 import NearbyMerchants from "./NearbyMerchants";
+import QRAuditLog from "./QRAuditLog";
 
 const CustomerDashboard = () => {
   const { user, signOut } = useAuth();
