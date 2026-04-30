@@ -163,10 +163,18 @@ const MerchantDashboard = () => {
           </div>
         )}
 
-        <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
+        {merchant && (
+          <div className="mb-8">
+            <MerchantSettlementsPanel merchantId={merchant.id} />
+          </div>
+        )}
+
+        <div className="bg-card border border-border rounded-2xl p-6 shadow-card mb-8">
           <h2 className="font-cairo font-bold text-foreground text-lg mb-4">آخر العمليات</h2>
           {user && <TransactionList userId={user.id} role="merchant" refreshKey={refreshKey} />}
         </div>
+
+        {merchant && <QRAuditLog scope="merchant" entityId={merchant.id} />}
       </main>
     </div>
   );
