@@ -159,6 +159,7 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
     setAmount("");
     setCustomerInfo(null);
     setStep("scan");
+    setFailureReason("");
   };
 
   return (
