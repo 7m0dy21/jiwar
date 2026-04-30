@@ -11,6 +11,7 @@ import TransactionList from "./TransactionList";
 import NotificationBell from "./NotificationBell";
 import PaymentDialog from "./PaymentDialog";
 import NearbyMerchants from "./NearbyMerchants";
+import QRAuditLog from "./QRAuditLog";
 
 const CustomerDashboard = () => {
   const { user, signOut } = useAuth();
@@ -142,6 +143,12 @@ const CustomerDashboard = () => {
           <h2 className="font-cairo font-bold text-foreground text-lg mb-4">سجل العمليات</h2>
           {user && <TransactionList userId={user.id} role="customer" refreshKey={refreshKey} />}
         </div>
+
+        {customer && (
+          <div className="mb-8">
+            <QRAuditLog scope="customer" entityId={customer.id} />
+          </div>
+        )}
 
         <NearbyMerchants />
       </main>

@@ -10,11 +10,8 @@ const TTL_SECONDS = 60;
 async function hmacSign(message: string, secret: string): Promise<string> {
   const enc = new TextEncoder();
   const key = await crypto.subtle.importKey(
-    "raw",
-    enc.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"]
+    "raw", enc.encode(secret),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
   );
   const sig = await crypto.subtle.sign("HMAC", key, enc.encode(message));
   return Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, "0")).join("");
@@ -23,11 +20,22 @@ async function hmacSign(message: string, secret: string): Promise<string> {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
+  const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+  const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
+  const SECRET = Deno.env.get("JIWAR_QR_SECRET");
+  const admin = createClient(SUPABASE_URL, SERVICE_KEY);
+
+  const logAudit = async (customerId: string | null, merchantId: string | null, event: string, amount: number | null, reason: string | null, metadata: any = null) => {
+    try {
+      await admin.rpc("log_qr_audit", {
+        p_customer_id: customerId, p_merchant_id: merchantId,
+        p_event: event, p_amount: amount, p_reason: reason, p_metadata: metadata,
+      });
+    } catch (_) { /* swallow audit errors */ }
+  };
+
   try {
-    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-    const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const SECRET = Deno.env.get("JIWAR_QR_SECRET");
     if (!SECRET) throw new Error("JIWAR_QR_SECRET missing");
 
     const authHeader = req.headers.get("Authorization") || "";
@@ -45,8 +53,6 @@ Deno.serve(async (req) => {
     const action = body.action;
 
     if (action === "generate") {
-      // Customer generates QR token
-      const admin = createClient(SUPABASE_URL, SERVICE_KEY);
       const { data: customer } = await admin.from("customers").select("id").eq("user_id", userId).single();
       if (!customer) {
         return new Response(JSON.stringify({ error: "ليس لديك حساب عميل" }), {
@@ -57,44 +63,81 @@ Deno.serve(async (req) => {
       const payload = `${customer.id}.${ts}`;
       const sig = await hmacSign(payload, SECRET);
       const token = `JIWARv2.${customer.id}.${ts}.${sig}`;
+      await logAudit(customer.id, null, "generated", null, "تم توليد كود ديناميكي", { ttl: TTL_SECONDS });
       return new Response(JSON.stringify({ token, ttl: TTL_SECONDS, expires_at: ts + TTL_SECONDS }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
     if (action === "pay") {
-      // Merchant scans + amount
       const { token, amount } = body;
-      if (!token || typeof token !== "string") throw new Error("token مطلوب");
       const numAmount = Number(amount);
+      if (!token || typeof token !== "string") {
+        await logAudit(null, null, "invalid_signature", numAmount || null, "كود مفقود");
+        throw new Error("token مطلوب");
+      }
       if (!numAmount || numAmount <= 0) throw new Error("المبلغ غير صالح");
 
       const parts = token.split(".");
-      if (parts.length !== 4 || parts[0] !== "JIWARv2") throw new Error("كود غير صالح");
+      if (parts.length !== 4 || parts[0] !== "JIWARv2") {
+        await logAudit(null, null, "invalid_signature", numAmount, "صيغة كود غير صحيحة");
+        throw new Error("كود غير صالح");
+      }
       const [, customerId, tsStr, sig] = parts;
       const ts = parseInt(tsStr, 10);
       if (!ts) throw new Error("كود غير صالح");
 
+      // Resolve merchant id for audit
+      const { data: mer } = await admin.from("merchants").select("id").eq("user_id", userId).single();
+      const merchantId = mer?.id || null;
+
       const now = Math.floor(Date.now() / 1000);
       if (now - ts > TTL_SECONDS) {
+        await logAudit(customerId, merchantId, "expired", numAmount, "انتهت صلاحية الكود");
+        // Notify customer
+        const { data: cust } = await admin.from("customers").select("user_id").eq("id", customerId).single();
+        if (cust?.user_id) {
+          await admin.from("notifications").insert({
+            user_id: cust.user_id, title: "انتهت صلاحية الكود",
+            message: "انتهت صلاحية كود الدفع - يُرجى توليد كود جديد", type: "warning",
+          });
+        }
         return new Response(JSON.stringify({ error: "انتهت صلاحية الكود - اطلب من العميل تحديثه" }), {
           status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
 
       const expectedSig = await hmacSign(`${customerId}.${ts}`, SECRET);
-      if (expectedSig !== sig) throw new Error("توقيع غير صالح");
+      if (expectedSig !== sig) {
+        await logAudit(customerId, merchantId, "invalid_signature", numAmount, "توقيع غير صالح");
+        throw new Error("توقيع غير صالح");
+      }
 
-      const admin = createClient(SUPABASE_URL, SERVICE_KEY);
       const { data: txId, error } = await admin.rpc("process_dynamic_qr_transaction", {
         p_customer_id: customerId,
         p_merchant_user_id: userId,
         p_amount: numAmount,
       });
-      if (error) throw new Error(error.message);
+      if (error) {
+        // RPC already logged the specific reason via log_qr_audit
+        // Notify customer of rejection
+        const { data: cust } = await admin.from("customers").select("user_id").eq("id", customerId).single();
+        if (cust?.user_id) {
+          await admin.from("notifications").insert({
+            user_id: cust.user_id, title: "تم رفض عملية الدفع",
+            message: error.message || "تعذّر إتمام العملية", type: "error",
+          });
+        }
+        throw new Error(error.message);
+      }
 
-      // Notify customer
+      // Fetch enriched info for client confirmation screen
       const { data: cust } = await admin.from("customers").select("user_id").eq("id", customerId).single();
+      const { data: custProfile } = cust?.user_id
+        ? await admin.from("profiles").select("full_name").eq("user_id", cust.user_id).single()
+        : { data: null } as any;
+      const { data: merProfile } = await admin.from("profiles").select("full_name").eq("user_id", userId).single();
+
       if (cust?.user_id) {
         await admin.from("notifications").insert({
           user_id: cust.user_id, title: "عملية شراء جديدة",
@@ -102,9 +145,13 @@ Deno.serve(async (req) => {
         });
       }
 
-      return new Response(JSON.stringify({ success: true, transaction_id: txId }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(JSON.stringify({
+        success: true,
+        transaction_id: txId,
+        amount: numAmount,
+        customer_name: custProfile?.full_name || "عميل",
+        merchant_name: merProfile?.full_name || "تاجر",
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     throw new Error("action غير صالح");

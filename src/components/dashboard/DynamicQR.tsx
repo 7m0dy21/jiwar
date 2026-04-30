@@ -38,9 +38,14 @@ const DynamicQR = ({ customerName }: DynamicQRProps) => {
 
   useEffect(() => {
     if (!open || !expiresAt) return;
+    let warned = false;
     const tick = () => {
       const left = expiresAt - Math.floor(Date.now() / 1000);
       setRemaining(Math.max(0, left));
+      if (left === 10 && !warned) {
+        warned = true;
+        toast.warning("سينتهي الكود خلال 10 ثوانٍ - تأكد من إتمام العملية");
+      }
       if (left <= 0) generate();
     };
     tick();

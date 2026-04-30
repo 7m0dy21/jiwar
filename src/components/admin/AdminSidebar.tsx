@@ -1,6 +1,6 @@
 import { useAuth } from "@/hooks/useAuth";
 import jiwarLogo from "@/assets/jiwar-logo.png";
-import { LayoutDashboard, Store, Users, Receipt, LogOut, ShieldCheck, ShieldAlert } from "lucide-react";
+import { LayoutDashboard, Store, Users, Receipt, LogOut, ShieldCheck, ShieldAlert, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Sidebar,
@@ -14,7 +14,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 
-type AdminTab = "overview" | "merchants" | "customers" | "transactions" | "managers" | "risk";
+type AdminTab = "overview" | "merchants" | "customers" | "transactions" | "managers" | "risk" | "limits";
 
 const items: { title: string; id: AdminTab; icon: any }[] = [
   { title: "نظرة عامة", id: "overview", icon: LayoutDashboard },
@@ -22,6 +22,7 @@ const items: { title: string; id: AdminTab; icon: any }[] = [
   { title: "العملاء", id: "customers", icon: Users },
   { title: "المعاملات", id: "transactions", icon: Receipt },
   { title: "المخاطر", id: "risk", icon: ShieldAlert },
+  { title: "حدود العمليات", id: "limits", icon: SlidersHorizontal },
   { title: "المشرفين", id: "managers", icon: ShieldCheck },
 ];
 

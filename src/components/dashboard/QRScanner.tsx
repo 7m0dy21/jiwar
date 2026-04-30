@@ -111,18 +111,26 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
 
   const handleLookup = () => handleLookupWithCode(qrCode);
 
+  const [failureReason, setFailureReason] = useState<string>("");
+
   const handleProcess = async () => {
+    setFailureReason("");
     const numAmount = parseFloat(amount);
-    if (!numAmount || numAmount <= 0) { toast.error("أدخل مبلغاً صالحاً"); return; }
-    if (numAmount > customerInfo?.available_balance) { toast.error("المبلغ أكبر من رصيد العميل المتاح"); return; }
+    if (!numAmount || numAmount <= 0) { setFailureReason("أدخل مبلغاً صالحاً"); toast.error("أدخل مبلغاً صالحاً"); return; }
+    if (numAmount > customerInfo?.available_balance) {
+      setFailureReason(`المبلغ (${numAmount} ر.س) أكبر من رصيد العميل المتاح (${customerInfo?.available_balance} ر.س)`);
+      toast.error("المبلغ أكبر من رصيد العميل المتاح"); return;
+    }
     setLoading(true);
     try {
-      // If dynamic token present, use secure edge function
       if (customerInfo?._dynamicToken) {
         const { data, error } = await supabase.functions.invoke("qr-pay", {
           body: { action: "pay", token: customerInfo._dynamicToken, amount: numAmount },
         });
-        if (error || data?.error) { toast.error(data?.error || error?.message || "فشل الدفع"); return; }
+        if (error || data?.error) {
+          const msg = data?.error || error?.message || "فشل الدفع";
+          setFailureReason(msg); toast.error(msg); return;
+        }
         toast.success(`تمت العملية بنجاح! رقم: ${(data.transaction_id as string).slice(0, 8)}`);
         setOpen(false); resetState(); onSuccess();
         return;
@@ -134,13 +142,12 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
         p_amount: numAmount,
       });
 
-      if (error) { toast.error(error.message); return; }
+      if (error) { setFailureReason(error.message); toast.error(error.message); return; }
       toast.success(`تمت العملية بنجاح! رقم المعاملة: ${(data as string).slice(0, 8)}`);
-      setOpen(false);
-      resetState();
-      onSuccess();
-    } catch {
-      toast.error("حدث خطأ في تنفيذ العملية");
+      setOpen(false); resetState(); onSuccess();
+    } catch (e: any) {
+      const msg = e?.message || "حدث خطأ في تنفيذ العملية";
+      setFailureReason(msg); toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -152,6 +159,7 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
     setAmount("");
     setCustomerInfo(null);
     setStep("scan");
+    setFailureReason("");
   };
 
   return (
@@ -208,13 +216,28 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
               <p className="text-sm text-muted-foreground font-ibm">العميل</p>
               <p className="font-cairo font-bold text-foreground text-lg">{customerInfo?.full_name || "عميل"}</p>
               <p className="text-sm text-primary font-ibm mt-1">الرصيد المتاح: {customerInfo?.available_balance} ر.س</p>
+              {customerInfo?._dynamicToken && (
+                <p className="text-xs text-primary font-ibm mt-1">✓ كود ديناميكي آمن</p>
+              )}
             </div>
             <div>
               <Label className="font-cairo">المبلغ (ر.س)</Label>
               <Input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" dir="ltr" className="mt-1 text-center text-2xl font-bold" min="0.01" step="0.01" />
             </div>
+            {amount && parseFloat(amount) > 0 && (
+              <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 text-center">
+                <p className="text-xs text-muted-foreground font-ibm">المبلغ المطلوب خصمه</p>
+                <p className="font-cairo font-bold text-primary text-2xl">{parseFloat(amount).toFixed(2)} ر.س</p>
+              </div>
+            )}
+            {failureReason && (
+              <div className="bg-destructive/10 border border-destructive/30 rounded-xl p-3 text-center">
+                <p className="text-xs font-cairo font-bold text-destructive mb-1">سبب فشل التحقق</p>
+                <p className="text-sm text-destructive font-ibm">{failureReason}</p>
+              </div>
+            )}
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setStep("scan")} className="flex-1">رجوع</Button>
+              <Button variant="outline" onClick={() => { setStep("scan"); setFailureReason(""); }} className="flex-1">رجوع</Button>
               <Button onClick={handleProcess} disabled={loading} className="flex-1 bg-gradient-primary text-primary-foreground">
                 {loading ? "جارٍ التنفيذ..." : "تأكيد الدفع"}
               </Button>
