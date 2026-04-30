@@ -14,7 +14,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 
-type AdminTab = "overview" | "merchants" | "customers" | "transactions" | "managers" | "risk";
+type AdminTab = "overview" | "merchants" | "customers" | "transactions" | "managers" | "risk" | "limits";
 
 const items: { title: string; id: AdminTab; icon: any }[] = [
   { title: "نظرة عامة", id: "overview", icon: LayoutDashboard },
@@ -22,6 +22,7 @@ const items: { title: string; id: AdminTab; icon: any }[] = [
   { title: "العملاء", id: "customers", icon: Users },
   { title: "المعاملات", id: "transactions", icon: Receipt },
   { title: "المخاطر", id: "risk", icon: ShieldAlert },
+  { title: "حدود العمليات", id: "limits", icon: SlidersHorizontal },
   { title: "المشرفين", id: "managers", icon: ShieldCheck },
 ];
 
