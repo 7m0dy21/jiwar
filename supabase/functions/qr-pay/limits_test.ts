@@ -12,18 +12,51 @@
 //   7. happy path under limits
 //   8. audit log records limit_exceeded events
 
+import "https://deno.land/std@0.224.0/dotenv/load.ts";
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { assertEquals, assertExists, assertRejects } from "https://deno.land/std@0.224.0/assert/mod.ts";
 
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
-const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+// Env resolution: prefer explicit test vars, fall back to the standard
+// Supabase server-side names, then the Vite public names from the root .env.
+const SUPABASE_URL =
+  Deno.env.get("SUPABASE_URL") ??
+  Deno.env.get("VITE_SUPABASE_URL") ??
+  "";
+const SERVICE_KEY =
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ??
+  Deno.env.get("SERVICE_ROLE_KEY") ??
+  "";
+
+// Single source of truth for the "missing env" error so every test fails
+// with the exact same actionable message instead of a generic null deref.
+const MISSING_ENV_MSG = [
+  "❌ Missing required environment variables for qr-pay limit tests.",
+  "   Required:",
+  "     - SUPABASE_URL              (or VITE_SUPABASE_URL)",
+  "     - SUPABASE_SERVICE_ROLE_KEY (service role key, NOT the anon key)",
+  "   Add them to your root .env file or export them before running the tests.",
+  "   Example .env entries:",
+  "     SUPABASE_URL=https://<project-ref>.supabase.co",
+  "     SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOi...",
+].join("\n");
+
+function requireEnv(): void {
+  if (!SUPABASE_URL || !SERVICE_KEY) {
+    throw new Error(MISSING_ENV_MSG);
+  }
+}
 
 function admin(): SupabaseClient {
-  if (!SUPABASE_URL || !SERVICE_KEY) {
-    throw new Error("SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY env vars required");
-  }
+  requireEnv();
   return createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 }
+
+// Sanity-check test: runs first and fails loudly (with the full guidance
+// message) when env vars are missing, so the rest of the failures are
+// self-explanatory instead of cascading noise.
+Deno.test("env: SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are configured", () => {
+  requireEnv();
+});
 
 interface Fixtures {
   customerUserId: string;
