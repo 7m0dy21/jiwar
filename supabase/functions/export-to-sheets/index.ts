@@ -126,16 +126,23 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    // Check if called via HTTP (not trigger) - require admin auth
+    // Always require a valid Supabase admin session — no anonymous calls,
+    // no implicit "trigger" bypass. Automated exports must go through the
+    // service role explicitly.
     const authHeader = req.headers.get("Authorization");
-    const isTriggerCall = !authHeader || authHeader === `Bearer ${serviceRoleKey}`;
-    
-    if (!isTriggerCall) {
-      // Verify user is admin
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "غير مصرح" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const isServiceRoleCall = authHeader === `Bearer ${serviceRoleKey}`;
+    if (!isServiceRoleCall) {
+      const token = authHeader.replace(/^Bearer\s+/i, "");
       const userClient = createClient(supabaseUrl, anonKey, {
         global: { headers: { Authorization: authHeader } },
       });
-      const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(authHeader.replace('Bearer ', ''));
+      const { data: claimsData, error: claimsError } = await userClient.auth.getClaims(token);
       if (claimsError || !claimsData?.claims?.sub) {
         return new Response(JSON.stringify({ error: "غير مصرح" }), {
           status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
