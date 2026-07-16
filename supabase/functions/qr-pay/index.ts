@@ -69,6 +69,47 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (action === "lookup") {
+      const { token } = body;
+      if (!token || typeof token !== "string") throw new Error("token مطلوب");
+      const parts = token.split(".");
+      if (parts.length !== 4 || parts[0] !== "JIWARv2") {
+        await logAudit(null, null, "invalid_signature", null, "صيغة كود غير صحيحة (lookup)");
+        throw new Error("كود غير صالح");
+      }
+      const [, customerId, tsStr, sig] = parts;
+      const ts = parseInt(tsStr, 10);
+      if (!ts) throw new Error("كود غير صالح");
+      const { data: mer } = await admin.from("merchants").select("id").eq("user_id", userId).single();
+      if (!mer) throw new Error("حساب التاجر غير موجود");
+      const now = Math.floor(Date.now() / 1000);
+      if (now - ts > TTL_SECONDS) {
+        await logAudit(customerId, mer.id, "expired", null, "انتهت صلاحية الكود (lookup)");
+        throw new Error("انتهت صلاحية الكود - اطلب من العميل تحديثه");
+      }
+      const expectedSig = await hmacSign(`${customerId}.${ts}`, SECRET);
+      if (expectedSig !== sig) {
+        await logAudit(customerId, mer.id, "invalid_signature", null, "توقيع غير صالح (lookup)");
+        throw new Error("توقيع غير صالح");
+      }
+      const { data: cust } = await admin
+        .from("customers")
+        .select("id, available_balance, credit_limit, user_id, onboarding_completed")
+        .eq("id", customerId).single();
+      if (!cust) throw new Error("العميل غير موجود");
+      if (!cust.onboarding_completed) throw new Error("لم يكمل العميل التحقق بعد");
+      const { data: profile } = await admin.from("profiles").select("full_name").eq("user_id", cust.user_id).single();
+      return new Response(JSON.stringify({
+        customer: {
+          id: cust.id,
+          full_name: profile?.full_name || "عميل",
+          available_balance: cust.available_balance,
+          credit_limit: cust.credit_limit,
+        },
+        expires_at: ts + TTL_SECONDS,
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+
     if (action === "pay") {
       const { token, amount } = body;
       const numAmount = Number(amount);
