@@ -6,6 +6,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
+import { Link } from "react-router-dom";
+import { Settings } from "lucide-react";
 
 interface Notification {
   id: string;
