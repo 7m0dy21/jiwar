@@ -55,15 +55,35 @@ export async function enablePush(userId: string): Promise<{ ok: boolean; reason?
 
   const tokens = new Set<string>(existing?.fcm_tokens || []);
   tokens.add(token);
+  const platform = /iPhone|iPad|iPod/i.test(navigator.userAgent)
+    ? "ios-web"
+    : /Android/i.test(navigator.userAgent) ? "android-web" : "web";
 
   const { error } = await supabase.from("notification_preferences").upsert({
     user_id: userId,
     push_enabled: true,
     fcm_tokens: Array.from(tokens),
-    platform: /iPhone|iPad|iPod/i.test(navigator.userAgent) ? "ios-web" : /Android/i.test(navigator.userAgent) ? "android-web" : "web",
+    platform,
   }, { onConflict: "user_id" });
   if (error) return { ok: false, reason: error.message };
-  return { ok: true };
+
+  // Register/refresh device label row
+  const label = `${platform} — ${navigator.userAgent.split(") ")[0].split("(").pop() || "جهاز"}`;
+  await supabase.from("device_tokens").upsert({
+    user_id: userId, token, label, platform, last_seen_at: new Date().toISOString(),
+  }, { onConflict: "user_id,token" });
+  return { ok: true, token };
+}
+
+export async function getCurrentDeviceToken(): Promise<string | null> {
+  if (!isFirebaseConfigured() || !("Notification" in window)) return null;
+  if (Notification.permission !== "granted") return null;
+  const swReg = await ensureServiceWorker();
+  const messaging = await initMessaging();
+  if (!messaging || !swReg) return null;
+  try {
+    return await getToken(messaging, { vapidKey: VAPID_PUBLIC_KEY, serviceWorkerRegistration: swReg });
+  } catch { return null; }
 }
 
 export async function disablePush(userId: string) {
