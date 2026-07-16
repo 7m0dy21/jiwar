@@ -28,6 +28,29 @@ jobs:
       - name: Verify RLS + policies + function EXECUTE grants
         run: deno run --allow-net --allow-env --allow-read scripts/db_guardrails.ts
 
+  security-scan:
+    name: Security Scan (RLS + SECURITY DEFINER — blocks merge on new findings)
+    runs-on: ubuntu-latest
+    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v1
+        with:
+          deno-version: v1.x
+      - name: Guard — required secrets present
+        run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "❌ Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY."
+            exit 1
+          fi
+      - name: Scan RLS + SECURITY DEFINER posture vs. baseline
+        run: deno run --allow-net --allow-env --allow-read scripts/security_scan.ts
+
+
+
 
   unit-tests:
     name: Unit tests (Vitest — Dashboard routing guards)
