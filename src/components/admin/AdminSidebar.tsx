@@ -1,6 +1,6 @@
 import { useAuth } from "@/hooks/useAuth";
 import jiwarLogo from "@/assets/jiwar-logo.png";
-import { LayoutDashboard, Store, Users, Receipt, LogOut, ShieldCheck, ShieldAlert, SlidersHorizontal, AlertTriangle, ShieldQuestion, ScanLine } from "lucide-react";
+import { LayoutDashboard, Store, Users, Receipt, LogOut, ShieldCheck, ShieldAlert, SlidersHorizontal, AlertTriangle, ShieldQuestion, ScanLine, FileCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Sidebar,
