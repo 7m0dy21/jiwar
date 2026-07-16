@@ -167,9 +167,10 @@ Deno.serve(async (req) => {
       }
 
       // Instead of charging directly, create a payment request awaiting customer approval
-      const { data: cust } = await admin.from("customers").select("user_id").eq("id", customerId).single();
-      if (!merchantId) throw new Error("حساب التاجر غير موجود");
-      if (!cust?.user_id) throw new Error("العميل غير موجود");
+      const { data: cust } = await admin.from("customers").select("user_id, onboarding_completed").eq("id", customerId).maybeSingle();
+      if (!merchantId) throw new Error("حساب التاجر غير موجود - سجّل دخول من حساب تاجر");
+      if (!cust?.user_id) throw new Error("العميل غير موجود - قد يكون الكود قديماً أو الحساب محذوفاً");
+      if (!cust.onboarding_completed) throw new Error("لم يكمل العميل التحقق (نفاذ/سمة/نافذ)");
 
       const { data: reqRow, error: reqErr } = await admin.from("payment_requests").insert({
         customer_id: customerId,
