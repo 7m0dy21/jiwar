@@ -62,7 +62,7 @@ const MerchantSettlementsPanel = ({ merchantId }: Props) => {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {stats.map((s, i) => (
           <div key={i} className="bg-card border border-border rounded-2xl p-5 shadow-card">
             <div className="flex items-center gap-2 mb-2">
