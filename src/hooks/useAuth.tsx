@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, ReactNode, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { User, Session } from "@supabase/supabase-js";
 
@@ -7,6 +7,8 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   role: string | null;
+  roleError: string | null;
+  retryRole: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -15,44 +17,89 @@ const AuthContext = createContext<AuthContextType>({
   session: null,
   loading: true,
   role: null,
+  roleError: null,
+  retryRole: async () => {},
   signOut: async () => {},
 });
+
+const MAX_AUTO_RETRIES = 3;
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<string | null>(null);
+  const [roleError, setRoleError] = useState<string | null>(null);
   const sessionRequestId = useRef(0);
 
-  const fetchRole = async (userId: string): Promise<string | null> => {
+  const fetchRole = async (
+    userId: string
+  ): Promise<{ role: string | null; error: string | null }> => {
     const { data, error } = await supabase
       .from("user_roles")
       .select("role")
       .eq("user_id", userId);
 
-    if (error || !data || data.length === 0) {
-      return null;
+    if (error) {
+      return { role: null, error: error.message || "تعذر جلب الصلاحيات" };
+    }
+    if (!data || data.length === 0) {
+      return { role: null, error: null };
     }
 
-    // Prioritize: admin > merchant > customer
     const priorities = ["admin", "merchant", "customer"];
-    const sorted = [...data].sort((a, b) => priorities.indexOf(a.role) - priorities.indexOf(b.role));
-    return sorted[0].role;
+    const sorted = [...data].sort(
+      (a, b) => priorities.indexOf(a.role) - priorities.indexOf(b.role)
+    );
+    return { role: sorted[0].role, error: null };
+  };
+
+  const loadRoleWithRetry = async (userId: string, requestId: number) => {
+    let lastError: string | null = null;
+    for (let attempt = 0; attempt < MAX_AUTO_RETRIES; attempt++) {
+      const { role: r, error } = await fetchRole(userId);
+      if (sessionRequestId.current !== requestId) return;
+      if (!error) {
+        setRole(r);
+        setRoleError(null);
+        return;
+      }
+      lastError = error;
+      await new Promise((res) => setTimeout(res, 500 * (attempt + 1)));
+    }
+    if (sessionRequestId.current !== requestId) return;
+    setRole(null);
+    setRoleError(lastError || "تعذر التحقق من الصلاحيات");
   };
 
   const applySession = async (nextSession: Session | null) => {
     const requestId = ++sessionRequestId.current;
     setLoading(true);
+    setRoleError(null);
     setSession(nextSession);
     setUser(nextSession?.user ?? null);
 
-    const nextRole = nextSession?.user ? await fetchRole(nextSession.user.id) : null;
+    if (!nextSession?.user) {
+      if (sessionRequestId.current !== requestId) return;
+      setRole(null);
+      setLoading(false);
+      return;
+    }
 
+    await loadRoleWithRetry(nextSession.user.id, requestId);
     if (sessionRequestId.current !== requestId) return;
-    setRole(nextRole);
     setLoading(false);
   };
+
+  const retryRole = useCallback(async () => {
+    if (!user) return;
+    const requestId = ++sessionRequestId.current;
+    setLoading(true);
+    setRoleError(null);
+    await loadRoleWithRetry(user.id, requestId);
+    if (sessionRequestId.current !== requestId) return;
+    setLoading(false);
+  }, [user]);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -75,7 +122,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, role, signOut }}>
+    <AuthContext.Provider
+      value={{ user, session, loading, role, roleError, retryRole, signOut }}
+    >
       {children}
     </AuthContext.Provider>
   );
