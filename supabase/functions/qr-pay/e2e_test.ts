@@ -288,3 +288,56 @@ Deno.test("E2E unauthorized: missing JWT is rejected", async () => {
   assertEquals(resp.status, 401);
   assertStringIncludes(String(json.error ?? ""), "Unauthorized");
 });
+
+Deno.test("E2E near-expiry: token scanned in the last seconds of TTL still succeeds", async () => {
+  const db = admin();
+  const f = await seed(db, { onboarded: true });
+  try {
+    // Forge a token 58s old (TTL=60s) — represents a merchant scanning right
+    // before expiry. Must NOT return "كود غير صالح" or "انتهت صلاحية".
+    const ts = Math.floor(Date.now() / 1000) - 58;
+    const customerId = uuidToCompact(f.customerId);
+    const userId = uuidToCompact(f.customerUserId);
+    const ts36 = ts.toString(36);
+    const payload = `${customerId}.${userId}.${ts36}`;
+    const sig = await hmacSignCompact(payload, QR_SECRET);
+    const token = `JIWARv3.${customerId}.${userId}.${ts36}.${sig}`;
+
+    const merJwt = await signIn(f.merchantEmail, f.password);
+    const look = await callQrPay(merJwt, { action: "lookup", token });
+    assertEquals(look.status, 200, `expected 200, got ${look.status}: ${JSON.stringify(look.json)}`);
+    assertEquals(look.json.customer.can_pay, true);
+  } finally { await cleanup(db, f); }
+});
+
+Deno.test("E2E auto-regeneration: newly-refreshed token is accepted immediately without 'كود غير صالح'", async () => {
+  const db = admin();
+  const f = await seed(db, { onboarded: true });
+  try {
+    const custJwt = await signIn(f.customerEmail, f.password);
+
+    // Simulate the client's proactive refresh: generate a first token, then
+    // (as if 8s before expiry) generate a second token. Both must lookup OK
+    // while inside their TTL window — no "كود غير صالح" between refreshes.
+    const first = await callQrPay(custJwt, { action: "generate" });
+    assertEquals(first.status, 200);
+    assertStringIncludes(first.json.token, "JIWARv3.");
+
+    const second = await callQrPay(custJwt, { action: "generate" });
+    assertEquals(second.status, 200);
+    assertStringIncludes(second.json.token, "JIWARv3.");
+
+    const merJwt = await signIn(f.merchantEmail, f.password);
+
+    // Scan the freshly-regenerated token (what the merchant now sees on screen).
+    const look2 = await callQrPay(merJwt, { action: "lookup", token: second.json.token });
+    assertEquals(look2.status, 200, `regenerated token rejected: ${JSON.stringify(look2.json)}`);
+    assertEquals(look2.json.customer.can_pay, true);
+
+    // The previous token is still within TTL, so it must also validate — proves
+    // the refresh boundary produces no transient "invalid" state.
+    const look1 = await callQrPay(merJwt, { action: "lookup", token: first.json.token });
+    assertEquals(look1.status, 200, `pre-refresh token rejected: ${JSON.stringify(look1.json)}`);
+    assertEquals(look1.json.customer.can_pay, true);
+  } finally { await cleanup(db, f); }
+});
