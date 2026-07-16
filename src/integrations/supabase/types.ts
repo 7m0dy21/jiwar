@@ -497,6 +497,7 @@ export type Database = {
           id: string
           merchant_id: string
           merchant_user_id: string
+          qr_token_hash: string | null
           reason: string | null
           status: string
           transaction_id: string | null
@@ -511,6 +512,7 @@ export type Database = {
           id?: string
           merchant_id: string
           merchant_user_id: string
+          qr_token_hash?: string | null
           reason?: string | null
           status?: string
           transaction_id?: string | null
@@ -525,6 +527,7 @@ export type Database = {
           id?: string
           merchant_id?: string
           merchant_user_id?: string
+          qr_token_hash?: string | null
           reason?: string | null
           status?: string
           transaction_id?: string | null
