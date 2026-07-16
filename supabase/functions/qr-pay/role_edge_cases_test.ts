@@ -113,7 +113,4 @@ Deno.test("grants: authenticated retains EXECUTE on has_role AND is_super_admin"
     `is_super_admin lost EXECUTE: ${isu.error?.message}`,
   );
 
-  // Silence unused-variable warnings for the diagnostic pg_proc probe above.
-  void data;
-  void error;
 });
