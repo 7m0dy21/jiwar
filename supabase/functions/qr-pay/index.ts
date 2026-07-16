@@ -113,44 +113,34 @@ Deno.serve(async (req) => {
         throw new Error("توقيع غير صالح");
       }
 
-      const { data: txId, error } = await admin.rpc("process_dynamic_qr_transaction", {
-        p_customer_id: customerId,
-        p_merchant_user_id: userId,
-        p_amount: numAmount,
-      });
-      if (error) {
-        // RPC already logged the specific reason via log_qr_audit
-        // Notify customer of rejection
-        const { data: cust } = await admin.from("customers").select("user_id").eq("id", customerId).single();
-        if (cust?.user_id) {
-          await admin.from("notifications").insert({
-            user_id: cust.user_id, title: "تم رفض عملية الدفع",
-            message: error.message || "تعذّر إتمام العملية", type: "error",
-          });
-        }
-        throw new Error(error.message);
-      }
-
-      // Fetch enriched info for client confirmation screen
+      // Instead of charging directly, create a payment request awaiting customer approval
       const { data: cust } = await admin.from("customers").select("user_id").eq("id", customerId).single();
-      const { data: custProfile } = cust?.user_id
-        ? await admin.from("profiles").select("full_name").eq("user_id", cust.user_id).single()
-        : { data: null } as any;
-      const { data: merProfile } = await admin.from("profiles").select("full_name").eq("user_id", userId).single();
+      if (!merchantId) throw new Error("حساب التاجر غير موجود");
+      if (!cust?.user_id) throw new Error("العميل غير موجود");
 
-      if (cust?.user_id) {
-        await admin.from("notifications").insert({
-          user_id: cust.user_id, title: "عملية شراء جديدة",
-          message: `تم خصم ${numAmount} ر.س من رصيدك`, type: "transaction",
-        });
-      }
+      const { data: reqRow, error: reqErr } = await admin.from("payment_requests").insert({
+        customer_id: customerId,
+        merchant_id: merchantId,
+        customer_user_id: cust.user_id,
+        merchant_user_id: userId,
+        amount: numAmount,
+      }).select("id, expires_at").single();
+      if (reqErr) throw new Error(reqErr.message);
+
+      const { data: merProfile } = await admin.from("profiles").select("full_name").eq("user_id", userId).single();
+      await admin.from("notifications").insert({
+        user_id: cust.user_id,
+        title: "طلب دفع جديد",
+        message: `يطلب ${merProfile?.full_name || "التاجر"} خصم ${numAmount} ر.س - وافق أو ارفض من التطبيق`,
+        type: "payment_request",
+      });
+      await logAudit(customerId, merchantId, "request_created", numAmount, "بانتظار موافقة العميل", { request_id: reqRow.id });
 
       return new Response(JSON.stringify({
-        success: true,
-        transaction_id: txId,
+        pending: true,
+        request_id: reqRow.id,
+        expires_at: reqRow.expires_at,
         amount: numAmount,
-        customer_name: custProfile?.full_name || "عميل",
-        merchant_name: merProfile?.full_name || "تاجر",
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
