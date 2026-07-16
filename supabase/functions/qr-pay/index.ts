@@ -80,8 +80,8 @@ Deno.serve(async (req) => {
       const [, customerId, tsStr, sig] = parts;
       const ts = parseInt(tsStr, 10);
       if (!ts) throw new Error("كود غير صالح");
-      const { data: mer } = await admin.from("merchants").select("id").eq("user_id", userId).single();
-      if (!mer) throw new Error("حساب التاجر غير موجود");
+      const { data: mer } = await admin.from("merchants").select("id").eq("user_id", userId).maybeSingle();
+      if (!mer) throw new Error("حساب التاجر غير موجود - سجّل دخول من حساب تاجر");
       const now = Math.floor(Date.now() / 1000);
       if (now - ts > TTL_SECONDS) {
         await logAudit(customerId, mer.id, "expired", null, "انتهت صلاحية الكود (lookup)");
@@ -92,17 +92,29 @@ Deno.serve(async (req) => {
         await logAudit(customerId, mer.id, "invalid_signature", null, "توقيع غير صالح (lookup)");
         throw new Error("توقيع غير صالح");
       }
-      const { data: cust } = await admin
+      const { data: cust, error: custErr } = await admin
         .from("customers")
         .select("id, available_balance, credit_limit, user_id, onboarding_completed")
-        .eq("id", customerId).single();
-      if (!cust) throw new Error("العميل غير موجود");
-      if (!cust.onboarding_completed) throw new Error("لم يكمل العميل التحقق بعد");
-      const { data: profile } = await admin.from("profiles").select("full_name").eq("user_id", cust.user_id).single();
+        .eq("id", customerId).maybeSingle();
+      if (custErr) {
+        await logAudit(customerId, mer.id, "lookup_error", null, custErr.message);
+        throw new Error("تعذر قراءة بيانات العميل");
+      }
+      if (!cust) {
+        await logAudit(customerId, mer.id, "customer_not_found", null, "معرّف العميل في الكود غير موجود");
+        throw new Error("العميل غير موجود - قد يكون الكود قديماً أو الحساب محذوفاً");
+      }
+      if (!cust.onboarding_completed) {
+        await logAudit(customerId, mer.id, "onboarding_incomplete", null, "لم يكمل العميل التحقق");
+        throw new Error("لم يكمل العميل التحقق (نفاذ/سمة/نافذ) - لا يمكن قبول الدفع بعد");
+      }
+      const { data: profile } = await admin.from("profiles").select("full_name, phone").eq("user_id", cust.user_id).maybeSingle();
       return new Response(JSON.stringify({
         customer: {
           id: cust.id,
+          user_id: cust.user_id,
           full_name: profile?.full_name || "عميل",
+          phone: profile?.phone || null,
           available_balance: cust.available_balance,
           credit_limit: cust.credit_limit,
         },
@@ -155,9 +167,10 @@ Deno.serve(async (req) => {
       }
 
       // Instead of charging directly, create a payment request awaiting customer approval
-      const { data: cust } = await admin.from("customers").select("user_id").eq("id", customerId).single();
-      if (!merchantId) throw new Error("حساب التاجر غير موجود");
-      if (!cust?.user_id) throw new Error("العميل غير موجود");
+      const { data: cust } = await admin.from("customers").select("user_id, onboarding_completed").eq("id", customerId).maybeSingle();
+      if (!merchantId) throw new Error("حساب التاجر غير موجود - سجّل دخول من حساب تاجر");
+      if (!cust?.user_id) throw new Error("العميل غير موجود - قد يكون الكود قديماً أو الحساب محذوفاً");
+      if (!cust.onboarding_completed) throw new Error("لم يكمل العميل التحقق (نفاذ/سمة/نافذ)");
 
       const { data: reqRow, error: reqErr } = await admin.from("payment_requests").insert({
         customer_id: customerId,

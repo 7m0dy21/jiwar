@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Wallet, Receipt, LogOut } from "lucide-react";
 import jiwarLogo from "@/assets/jiwar-logo.png";
-import QRDisplay from "./QRDisplay";
+
 import DynamicQR from "./DynamicQR";
 import OnboardingFlow from "./OnboardingFlow";
 import TransactionList from "./TransactionList";
@@ -118,9 +118,9 @@ const CustomerDashboard = () => {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-card border border-border rounded-2xl p-6 shadow-card space-y-2">
             <DynamicQR customerName={profile?.full_name || "عميل"} />
-            {customer?.qr_code && (
-              <QRDisplay qrCode={customer.qr_code} name={profile?.full_name || "عميل"} />
-            )}
+            <p className="text-xs text-muted-foreground font-ibm text-center">
+              كود ديناميكي مرتبط بحسابك ويتجدد كل 60 ثانية
+            </p>
           </div>
           <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
             <div className="flex items-center gap-3 mb-3">
