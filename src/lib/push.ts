@@ -28,7 +28,7 @@ async function ensureServiceWorker() {
   return navigator.serviceWorker.register("/firebase-messaging-sw.js", { scope: "/" });
 }
 
-export async function enablePush(userId: string): Promise<{ ok: boolean; reason?: string }> {
+export async function enablePush(userId: string): Promise<{ ok: boolean; reason?: string; token?: string }> {
   if (!isFirebaseConfigured()) {
     return { ok: false, reason: "لم يتم إعداد Firebase بعد. أضف مفاتيح Web Push في الإعدادات." };
   }
