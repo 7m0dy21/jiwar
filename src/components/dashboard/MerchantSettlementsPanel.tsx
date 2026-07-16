@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { TrendingUp, Calendar, CheckCircle2, Clock, DollarSign } from "lucide-react";
+import { TrendingUp, Calendar, CheckCircle2, Clock, DollarSign, Wallet } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 interface Props { merchantId: string; }
