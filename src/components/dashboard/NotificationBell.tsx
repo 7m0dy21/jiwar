@@ -6,6 +6,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
+import { Link } from "react-router-dom";
+import { Settings } from "lucide-react";
 
 interface Notification {
   id: string;
@@ -113,6 +115,12 @@ const NotificationBell = () => {
             ))
           )}
         </div>
+        <Link
+          to="/settings/notifications"
+          className="flex items-center justify-center gap-1 px-4 py-2 border-t border-border text-xs text-primary hover:bg-primary/5 font-ibm"
+        >
+          <Settings className="w-3.5 h-3.5" /> إعدادات الإشعارات وسجلها
+        </Link>
       </PopoverContent>
     </Popover>
   );
