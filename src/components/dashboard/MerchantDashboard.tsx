@@ -11,6 +11,7 @@ import QRScanner from "./QRScanner";
 import TransactionList from "./TransactionList";
 import NotificationBell from "./NotificationBell";
 import MerchantSettlementsPanel from "./MerchantSettlementsPanel";
+import MerchantMonthlyReport from "./MerchantMonthlyReport";
 import QRAuditLog from "./QRAuditLog";
 import { toast } from "sonner";
 
@@ -166,6 +167,12 @@ const MerchantDashboard = () => {
         {merchant && (
           <div className="mb-8">
             <MerchantSettlementsPanel merchantId={merchant.id} />
+          </div>
+        )}
+
+        {merchant && user && (
+          <div className="mb-8">
+            <MerchantMonthlyReport merchantId={merchant.id} merchantUserId={user.id} />
           </div>
         )}
 
