@@ -64,6 +64,10 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
     try {
       const trimmed = code.trim();
       const dynamicToken = trimmed.match(/JIWARv[23]\.[A-Za-z0-9._-]+/)?.[0] || trimmed;
+      if (dynamicToken.startsWith("JIWARv2.")) {
+        toast.error("الكود قديم - اطلب من العميل إغلاق نافذة QR وفتحها مرة أخرى لتوليد كود جديد");
+        return;
+      }
       if (!dynamicToken.startsWith("JIWARv2.") && !dynamicToken.startsWith("JIWARv3.")) {
         toast.error("كود غير صالح - يجب استخدام كود QR الديناميكي الآمن من تطبيق العميل");
         return;
