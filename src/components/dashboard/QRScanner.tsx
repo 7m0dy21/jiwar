@@ -129,8 +129,9 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
         toast.error("الكود قديم - اطلب من العميل إغلاق نافذة QR وفتحها مرة أخرى لتوليد كود جديد");
         return;
       }
-      if (!dynamicToken.startsWith("JIWARv3.")) {
-        toast.error("كود غير صالح - يجب استخدام كود QR الديناميكي الآمن من تطبيق العميل");
+      const check = validateJiwarV3(dynamicToken);
+      if (!check.ok) {
+        toast.error(check.reason);
         return;
       }
       const { data, error } = await supabase.functions.invoke("qr-pay", {
