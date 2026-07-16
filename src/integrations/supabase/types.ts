@@ -409,6 +409,73 @@ export type Database = {
         }
         Relationships: []
       }
+      payment_requests: {
+        Row: {
+          amount: number
+          created_at: string
+          customer_id: string
+          customer_user_id: string
+          expires_at: string
+          id: string
+          merchant_id: string
+          merchant_user_id: string
+          reason: string | null
+          status: string
+          transaction_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          customer_id: string
+          customer_user_id: string
+          expires_at?: string
+          id?: string
+          merchant_id: string
+          merchant_user_id: string
+          reason?: string | null
+          status?: string
+          transaction_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          customer_id?: string
+          customer_user_id?: string
+          expires_at?: string
+          id?: string
+          merchant_id?: string
+          merchant_user_id?: string
+          reason?: string | null
+          status?: string
+          transaction_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_requests_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_requests_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_requests_merchant_id_fkey"
+            columns: ["merchant_id"]
+            isOneToOne: false
+            referencedRelation: "merchants_public"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payments: {
         Row: {
           amount: number
@@ -768,6 +835,10 @@ export type Database = {
       recalculate_merchant_risk: {
         Args: { p_merchant_id: string }
         Returns: undefined
+      }
+      respond_payment_request: {
+        Args: { p_approve: boolean; p_request_id: string }
+        Returns: Json
       }
     }
     Enums: {
