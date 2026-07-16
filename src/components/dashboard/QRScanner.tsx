@@ -24,6 +24,24 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const scannerContainerRef = useRef<string>("qr-reader-" + Math.random().toString(36).slice(2));
 
+  const lastAttemptRef = useRef<{ code: string; at: number }>({ code: "", at: 0 });
+
+  const normalizeScanned = (raw: string): string | null => {
+    if (!raw) return null;
+    let s = raw.trim().replace(/^["'`]+|["'`]+$/g, "");
+    // If it's a URL that embeds the token, try to extract it
+    try {
+      if (/^https?:\/\//i.test(s)) {
+        const u = new URL(s);
+        const fromQuery = u.searchParams.get("t") || u.searchParams.get("token");
+        if (fromQuery) s = fromQuery;
+        else s = decodeURIComponent(u.pathname.split("/").filter(Boolean).pop() || s);
+      }
+    } catch {}
+    const match = s.match(/JIWARv[23]\.[A-Za-z0-9._-]+/);
+    return match ? match[0] : null;
+  };
+
   const startCamera = async () => {
     try {
       const scanner = new Html5Qrcode(scannerContainerRef.current);
@@ -31,14 +49,23 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
 
       await scanner.start(
         { facingMode: "environment" },
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        (decodedText) => {
-          setQrCode(decodedText);
-          stopCamera();
-          // Auto-lookup after scan
-          handleLookupWithCode(decodedText);
+        {
+          fps: 15,
+          qrbox: { width: 280, height: 280 },
+          aspectRatio: 1.0,
         },
-        () => {} // ignore errors during scanning
+        (decodedText) => {
+          const token = normalizeScanned(decodedText);
+          if (!token) return; // keep scanning until a valid token appears
+          const now = Date.now();
+          // Debounce duplicate reads
+          if (lastAttemptRef.current.code === token && now - lastAttemptRef.current.at < 2000) return;
+          lastAttemptRef.current = { code: token, at: now };
+          setQrCode(token);
+          stopCamera();
+          handleLookupWithCode(token);
+        },
+        () => {} // ignore per-frame errors
       );
       setCameraActive(true);
     } catch (err) {
@@ -62,13 +89,12 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
     if (!code.trim()) return;
     setLoading(true);
     try {
-      const trimmed = code.trim();
-      const dynamicToken = trimmed.match(/JIWARv[23]\.[A-Za-z0-9._-]+/)?.[0] || trimmed;
+      const dynamicToken = normalizeScanned(code) || code.trim();
       if (dynamicToken.startsWith("JIWARv2.")) {
         toast.error("الكود قديم - اطلب من العميل إغلاق نافذة QR وفتحها مرة أخرى لتوليد كود جديد");
         return;
       }
-      if (!dynamicToken.startsWith("JIWARv2.") && !dynamicToken.startsWith("JIWARv3.")) {
+      if (!dynamicToken.startsWith("JIWARv3.")) {
         toast.error("كود غير صالح - يجب استخدام كود QR الديناميكي الآمن من تطبيق العميل");
         return;
       }
