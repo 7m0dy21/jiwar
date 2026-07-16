@@ -9,7 +9,7 @@
 //   3. Onboarding incomplete — merchant can still identify the customer
 //      but receives can_pay=false with a verification_reason.
 //   4. Invalid signature — tampered token is rejected.
-//   5. Malformed token — non-JIWARv2 payload is rejected.
+//   5. Malformed token — non-JIWAR payload is rejected.
 //   6. Stale customer id relink — token carrying an old customer_id but
 //      a valid user_id is transparently relinked to the current customer.
 //
@@ -149,7 +149,7 @@ Deno.test("E2E happy path: customer generates token → merchant looks it up suc
     const gen = await callQrPay(custJwt, { action: "generate" });
     assertEquals(gen.status, 200);
     assertExists(gen.json.token);
-    assertStringIncludes(gen.json.token, "JIWARv2.");
+    assertStringIncludes(gen.json.token, "JIWARv3.");
 
     const merJwt = await signIn(f.merchantEmail, f.password);
     const look = await callQrPay(merJwt, { action: "lookup", token: gen.json.token });
