@@ -13,6 +13,7 @@ import PaymentDialog from "./PaymentDialog";
 import NearbyMerchants from "./NearbyMerchants";
 import QRAuditLog from "./QRAuditLog";
 import PaymentApprovals from "./PaymentApprovals";
+import NotificationSettings from "./NotificationSettings";
 
 const CustomerDashboard = () => {
   const { user, signOut } = useAuth();
@@ -153,6 +154,10 @@ const CustomerDashboard = () => {
         )}
 
         <NearbyMerchants />
+
+        <div className="mt-8">
+          <NotificationSettings />
+        </div>
       </main>
     </div>
   );

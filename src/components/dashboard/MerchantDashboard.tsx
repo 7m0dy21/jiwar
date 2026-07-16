@@ -13,6 +13,7 @@ import NotificationBell from "./NotificationBell";
 import MerchantSettlementsPanel from "./MerchantSettlementsPanel";
 import MerchantMonthlyReport from "./MerchantMonthlyReport";
 import QRAuditLog from "./QRAuditLog";
+import NotificationSettings from "./NotificationSettings";
 import { toast } from "sonner";
 
 const MerchantDashboard = () => {
