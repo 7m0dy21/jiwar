@@ -1,11 +1,63 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
-
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-};
+import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 
 const TTL_SECONDS = 60;
+
+type ParsedQrToken = {
+  customerId: string;
+  customerUserId: string | null;
+  timestamp: number;
+  signature: string;
+  signedPayload: string;
+};
+
+const jsonResponse = (data: unknown, status = 200) =>
+  new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
+function parseQrToken(token: string): ParsedQrToken {
+  const parts = token.split(".");
+  if (parts[0] !== "JIWARv2") throw new Error("كود غير صالح");
+
+  if (parts.length === 4) {
+    const [, customerId, tsStr, signature] = parts;
+    const timestamp = parseInt(tsStr, 10);
+    if (!customerId || !timestamp || !signature) throw new Error("كود غير صالح");
+    return {
+      customerId,
+      customerUserId: null,
+      timestamp,
+      signature,
+      signedPayload: `${customerId}.${timestamp}`,
+    };
+  }
+
+  if (parts.length === 5) {
+    const [, customerId, customerUserId, tsStr, signature] = parts;
+    const timestamp = parseInt(tsStr, 10);
+    if (!customerId || !customerUserId || !timestamp || !signature) throw new Error("كود غير صالح");
+    return {
+      customerId,
+      customerUserId,
+      timestamp,
+      signature,
+      signedPayload: `${customerId}.${customerUserId}.${timestamp}`,
+    };
+  }
+
+  throw new Error("كود غير صالح");
+}
+
+function signaturesMatch(expected: string, actual: string) {
+  if (expected.length !== actual.length) return false;
+  let diff = 0;
+  for (let i = 0; i < expected.length; i += 1) {
+    diff |= expected.charCodeAt(i) ^ actual.charCodeAt(i);
+  }
+  return diff === 0;
+}
 
 async function hmacSign(message: string, secret: string): Promise<string> {
   const enc = new TextEncoder();
@@ -15,6 +67,28 @@ async function hmacSign(message: string, secret: string): Promise<string> {
   );
   const sig = await crypto.subtle.sign("HMAC", key, enc.encode(message));
   return Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function resolveCustomer(admin: ReturnType<typeof createClient>, parsed: ParsedQrToken) {
+  const { data: byId, error: byIdError } = await admin
+    .from("customers")
+    .select("id, available_balance, credit_limit, user_id, onboarding_completed")
+    .eq("id", parsed.customerId)
+    .maybeSingle();
+
+  if (byIdError) return { customer: null, error: byIdError.message, relinked: false };
+  if (byId) return { customer: byId, error: null, relinked: false };
+
+  if (!parsed.customerUserId) return { customer: null, error: null, relinked: false };
+
+  const { data: byUser, error: byUserError } = await admin
+    .from("customers")
+    .select("id, available_balance, credit_limit, user_id, onboarding_completed")
+    .eq("user_id", parsed.customerUserId)
+    .maybeSingle();
+
+  if (byUserError) return { customer: null, error: byUserError.message, relinked: false };
+  return { customer: byUser, error: null, relinked: Boolean(byUser) };
 }
 
 Deno.serve(async (req) => {
@@ -44,72 +118,65 @@ Deno.serve(async (req) => {
     });
     const { data: userData } = await userClient.auth.getUser();
     if (!userData?.user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse({ error: "Unauthorized" }, 401);
     }
     const userId = userData.user.id;
     const body = await req.json();
     const action = body.action;
 
     if (action === "generate") {
-      const { data: customer } = await admin.from("customers").select("id").eq("user_id", userId).single();
+      const { data: customer } = await admin.from("customers").select("id, user_id").eq("user_id", userId).maybeSingle();
       if (!customer) {
-        return new Response(JSON.stringify({ error: "ليس لديك حساب عميل" }), {
-          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return jsonResponse({ error: "ليس لديك حساب عميل" }, 400);
       }
       const ts = Math.floor(Date.now() / 1000);
-      const payload = `${customer.id}.${ts}`;
+      const payload = `${customer.id}.${customer.user_id}.${ts}`;
       const sig = await hmacSign(payload, SECRET);
-      const token = `JIWARv2.${customer.id}.${ts}.${sig}`;
+      const token = `JIWARv2.${customer.id}.${customer.user_id}.${ts}.${sig}`;
       await logAudit(customer.id, null, "generated", null, "تم توليد كود ديناميكي", { ttl: TTL_SECONDS });
-      return new Response(JSON.stringify({ token, ttl: TTL_SECONDS, expires_at: ts + TTL_SECONDS }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse({ token, ttl: TTL_SECONDS, expires_at: ts + TTL_SECONDS });
     }
 
     if (action === "lookup") {
       const { token } = body;
       if (!token || typeof token !== "string") throw new Error("token مطلوب");
-      const parts = token.split(".");
-      if (parts.length !== 4 || parts[0] !== "JIWARv2") {
+      let parsed: ParsedQrToken;
+      try {
+        parsed = parseQrToken(token);
+      } catch (_) {
         await logAudit(null, null, "invalid_signature", null, "صيغة كود غير صحيحة (lookup)");
         throw new Error("كود غير صالح");
       }
-      const [, customerId, tsStr, sig] = parts;
-      const ts = parseInt(tsStr, 10);
-      if (!ts) throw new Error("كود غير صالح");
       const { data: mer } = await admin.from("merchants").select("id").eq("user_id", userId).maybeSingle();
       if (!mer) throw new Error("حساب التاجر غير موجود - سجّل دخول من حساب تاجر");
       const now = Math.floor(Date.now() / 1000);
-      if (now - ts > TTL_SECONDS) {
-        await logAudit(customerId, mer.id, "expired", null, "انتهت صلاحية الكود (lookup)");
+      if (now - parsed.timestamp > TTL_SECONDS) {
+        await logAudit(parsed.customerId, mer.id, "expired", null, "انتهت صلاحية الكود (lookup)");
         throw new Error("انتهت صلاحية الكود - اطلب من العميل تحديثه");
       }
-      const expectedSig = await hmacSign(`${customerId}.${ts}`, SECRET);
-      if (expectedSig !== sig) {
-        await logAudit(customerId, mer.id, "invalid_signature", null, "توقيع غير صالح (lookup)");
+      const expectedSig = await hmacSign(parsed.signedPayload, SECRET);
+      if (!signaturesMatch(expectedSig, parsed.signature)) {
+        await logAudit(parsed.customerId, mer.id, "invalid_signature", null, "توقيع غير صالح (lookup)");
         throw new Error("توقيع غير صالح");
       }
-      const { data: cust, error: custErr } = await admin
-        .from("customers")
-        .select("id, available_balance, credit_limit, user_id, onboarding_completed")
-        .eq("id", customerId).maybeSingle();
+      const { customer: cust, error: custErr, relinked } = await resolveCustomer(admin, parsed);
       if (custErr) {
-        await logAudit(customerId, mer.id, "lookup_error", null, custErr.message);
+        await logAudit(parsed.customerId, mer.id, "lookup_error", null, custErr);
         throw new Error("تعذر قراءة بيانات العميل");
       }
       if (!cust) {
-        await logAudit(customerId, mer.id, "customer_not_found", null, "معرّف العميل في الكود غير موجود");
+        await logAudit(parsed.customerId, mer.id, "customer_not_found", null, "معرّف العميل في الكود غير موجود");
         throw new Error("العميل غير موجود - قد يكون الكود قديماً أو الحساب محذوفاً");
       }
-      if (!cust.onboarding_completed) {
-        await logAudit(customerId, mer.id, "onboarding_incomplete", null, "لم يكمل العميل التحقق");
-        throw new Error("لم يكمل العميل التحقق (نفاذ/سمة/نافذ) - لا يمكن قبول الدفع بعد");
+      if (relinked) {
+        await logAudit(cust.id, mer.id, "customer_relinked", null, "تم ربط الكود بحساب العميل عبر user_id", { token_customer_id: parsed.customerId });
       }
       const { data: profile } = await admin.from("profiles").select("full_name, phone").eq("user_id", cust.user_id).maybeSingle();
-      return new Response(JSON.stringify({
+      const canPay = Boolean(cust.onboarding_completed);
+      if (!canPay) {
+        await logAudit(cust.id, mer.id, "onboarding_incomplete", null, "تم التعرف على العميل لكن لم يكمل التحقق");
+      }
+      return jsonResponse({
         customer: {
           id: cust.id,
           user_id: cust.user_id,
@@ -117,9 +184,11 @@ Deno.serve(async (req) => {
           phone: profile?.phone || null,
           available_balance: cust.available_balance,
           credit_limit: cust.credit_limit,
+          can_pay: canPay,
+          verification_reason: canPay ? null : "تم التعرف على العميل، لكنه لم يكمل التحقق (نفاذ/سمة/نافذ) بعد",
         },
-        expires_at: ts + TTL_SECONDS,
-      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+        expires_at: parsed.timestamp + TTL_SECONDS,
+      });
     }
 
     if (action === "pay") {
@@ -131,49 +200,46 @@ Deno.serve(async (req) => {
       }
       if (!numAmount || numAmount <= 0) throw new Error("المبلغ غير صالح");
 
-      const parts = token.split(".");
-      if (parts.length !== 4 || parts[0] !== "JIWARv2") {
+      let parsed: ParsedQrToken;
+      try {
+        parsed = parseQrToken(token);
+      } catch (_) {
         await logAudit(null, null, "invalid_signature", numAmount, "صيغة كود غير صحيحة");
         throw new Error("كود غير صالح");
       }
-      const [, customerId, tsStr, sig] = parts;
-      const ts = parseInt(tsStr, 10);
-      if (!ts) throw new Error("كود غير صالح");
 
       // Resolve merchant id for audit
-      const { data: mer } = await admin.from("merchants").select("id").eq("user_id", userId).single();
+      const { data: mer } = await admin.from("merchants").select("id").eq("user_id", userId).maybeSingle();
       const merchantId = mer?.id || null;
 
       const now = Math.floor(Date.now() / 1000);
-      if (now - ts > TTL_SECONDS) {
-        await logAudit(customerId, merchantId, "expired", numAmount, "انتهت صلاحية الكود");
+      if (now - parsed.timestamp > TTL_SECONDS) {
+        await logAudit(parsed.customerId, merchantId, "expired", numAmount, "انتهت صلاحية الكود");
         // Notify customer
-        const { data: cust } = await admin.from("customers").select("user_id").eq("id", customerId).single();
+        const { customer: cust } = await resolveCustomer(admin, parsed);
         if (cust?.user_id) {
           await admin.from("notifications").insert({
             user_id: cust.user_id, title: "انتهت صلاحية الكود",
             message: "انتهت صلاحية كود الدفع - يُرجى توليد كود جديد", type: "warning",
           });
         }
-        return new Response(JSON.stringify({ error: "انتهت صلاحية الكود - اطلب من العميل تحديثه" }), {
-          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return jsonResponse({ error: "انتهت صلاحية الكود - اطلب من العميل تحديثه" }, 400);
       }
 
-      const expectedSig = await hmacSign(`${customerId}.${ts}`, SECRET);
-      if (expectedSig !== sig) {
-        await logAudit(customerId, merchantId, "invalid_signature", numAmount, "توقيع غير صالح");
+      const expectedSig = await hmacSign(parsed.signedPayload, SECRET);
+      if (!signaturesMatch(expectedSig, parsed.signature)) {
+        await logAudit(parsed.customerId, merchantId, "invalid_signature", numAmount, "توقيع غير صالح");
         throw new Error("توقيع غير صالح");
       }
 
       // Instead of charging directly, create a payment request awaiting customer approval
-      const { data: cust } = await admin.from("customers").select("user_id, onboarding_completed").eq("id", customerId).maybeSingle();
+      const { customer: cust } = await resolveCustomer(admin, parsed);
       if (!merchantId) throw new Error("حساب التاجر غير موجود - سجّل دخول من حساب تاجر");
       if (!cust?.user_id) throw new Error("العميل غير موجود - قد يكون الكود قديماً أو الحساب محذوفاً");
       if (!cust.onboarding_completed) throw new Error("لم يكمل العميل التحقق (نفاذ/سمة/نافذ)");
 
       const { data: reqRow, error: reqErr } = await admin.from("payment_requests").insert({
-        customer_id: customerId,
+        customer_id: cust.id,
         merchant_id: merchantId,
         customer_user_id: cust.user_id,
         merchant_user_id: userId,
@@ -188,21 +254,19 @@ Deno.serve(async (req) => {
         message: `يطلب ${merProfile?.full_name || "التاجر"} خصم ${numAmount} ر.س - وافق أو ارفض من التطبيق`,
         type: "payment_request",
       });
-      await logAudit(customerId, merchantId, "request_created", numAmount, "بانتظار موافقة العميل", { request_id: reqRow.id });
+      await logAudit(cust.id, merchantId, "request_created", numAmount, "بانتظار موافقة العميل", { request_id: reqRow.id });
 
-      return new Response(JSON.stringify({
+      return jsonResponse({
         pending: true,
         request_id: reqRow.id,
         expires_at: reqRow.expires_at,
         amount: numAmount,
-      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      });
     }
 
     throw new Error("action غير صالح");
   } catch (err) {
     const msg = err instanceof Error ? err.message : "خطأ";
-    return new Response(JSON.stringify({ error: msg }), {
-      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return jsonResponse({ error: msg }, 400);
   }
 });
