@@ -51,6 +51,32 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
     return v2 ? v2[0].replace(/^jiwarv2/i, "JIWARv2") : null;
   };
 
+  // Strict client-side pre-validation of a JIWARv3 token structure.
+  // Returns { ok: true } or { ok: false, reason } with a specific Arabic message.
+  const validateJiwarV3 = (token: string): { ok: true } | { ok: false; reason: string } => {
+    if (!token) return { ok: false, reason: "لم يتم قراءة أي كود" };
+    if (/\s/.test(token)) return { ok: false, reason: "الكود يحتوي على مسافات - أعد المسح" };
+    if (!token.startsWith("JIWARv3.")) {
+      return { ok: false, reason: "صيغة الكود غير مدعومة - يجب أن يبدأ بـ JIWARv3" };
+    }
+    const parts = token.split(".");
+    if (parts.length !== 5) {
+      return { ok: false, reason: `بنية الكود غير مكتملة (${parts.length}/5 أجزاء) - اطلب من العميل تجديد الكود` };
+    }
+    const [, cid, uid, ts, sig] = parts;
+    if (!/^[0-9a-f]{32}$/i.test(cid)) return { ok: false, reason: "معرف العميل داخل الكود غير صالح" };
+    if (!/^[0-9a-f]{32}$/i.test(uid)) return { ok: false, reason: "معرف المستخدم داخل الكود غير صالح" };
+    if (!/^[0-9a-z]+$/i.test(ts)) return { ok: false, reason: "الطابع الزمني داخل الكود غير صالح" };
+    if (!/^[A-Za-z0-9_-]{20,64}$/.test(sig)) return { ok: false, reason: "توقيع الكود غير صالح - قد يكون مقصوصاً" };
+    // Timestamp sanity: base36 ms epoch, not older than 5 minutes and not in far future
+    const tsMs = parseInt(ts, 36);
+    if (!Number.isFinite(tsMs) || tsMs <= 0) return { ok: false, reason: "طابع زمني تالف" };
+    const ageMs = Date.now() - tsMs;
+    if (ageMs > 5 * 60 * 1000) return { ok: false, reason: "الكود منتهي الصلاحية - اطلب من العميل تجديده" };
+    if (ageMs < -60 * 1000) return { ok: false, reason: "فرق توقيت كبير بين الجهازين" };
+    return { ok: true };
+  };
+
   const startCamera = async () => {
     try {
       const scanner = new Html5Qrcode(scannerContainerRef.current);
