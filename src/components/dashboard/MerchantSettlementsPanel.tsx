@@ -111,6 +111,35 @@ const MerchantSettlementsPanel = ({ merchantId }: Props) => {
           </div>
         )}
       </div>
+
+      <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
+        <h3 className="font-cairo font-bold text-foreground text-lg mb-4">حالة التحصيل لكل عملية QR (لحظياً)</h3>
+        {recentTx.length === 0 ? (
+          <p className="text-sm text-muted-foreground font-ibm text-center py-2">لا توجد عمليات بعد</p>
+        ) : (
+          <div className="space-y-2">
+            {recentTx.map((t) => (
+              <div key={t.id} className="flex items-center justify-between border-b border-border/50 pb-2">
+                <div>
+                  <p className="font-cairo font-bold text-foreground">{Number(t.amount).toFixed(2)} ر.س</p>
+                  <p className="text-xs text-muted-foreground font-ibm">
+                    {new Date(t.created_at).toLocaleString("ar-SA")}
+                  </p>
+                </div>
+                {t.settlement_transfer_id ? (
+                  <Badge className="bg-jiwar-green/15 text-jiwar-green border-0 font-cairo">
+                    حُوّلت للحساب البنكي
+                  </Badge>
+                ) : (
+                  <Badge variant="secondary" className="font-cairo">
+                    قُيّدت — بانتظار التسوية الشهرية
+                  </Badge>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
