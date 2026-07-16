@@ -11,6 +11,27 @@ type ParsedQrToken = {
   signedPayload: string;
 };
 
+function uuidToCompact(uuid: string): string {
+  return uuid.replace(/-/g, "").toLowerCase();
+}
+
+function compactToUuid(value: string): string {
+  if (!/^[0-9a-f]{32}$/i.test(value)) throw new Error("كود غير صالح");
+  return [
+    value.slice(0, 8),
+    value.slice(8, 12),
+    value.slice(12, 16),
+    value.slice(16, 20),
+    value.slice(20),
+  ].join("-").toLowerCase();
+}
+
+function base64Url(bytes: Uint8Array): string {
+  let binary = "";
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
 const jsonResponse = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), {
     status,
@@ -18,7 +39,21 @@ const jsonResponse = (data: unknown, status = 200) =>
   });
 
 function parseQrToken(token: string): ParsedQrToken {
-  const parts = token.split(".");
+  const cleaned = token.trim();
+  const parts = cleaned.split(".");
+  if (parts[0] === "JIWARv3") {
+    const [, compactCustomerId, compactCustomerUserId, ts36, signature] = parts;
+    const timestamp = parseInt(ts36, 36);
+    if (!compactCustomerId || !compactCustomerUserId || !timestamp || !signature) throw new Error("كود غير صالح");
+    return {
+      customerId: compactToUuid(compactCustomerId),
+      customerUserId: compactToUuid(compactCustomerUserId),
+      timestamp,
+      signature,
+      signedPayload: `${compactCustomerId.toLowerCase()}.${compactCustomerUserId.toLowerCase()}.${ts36.toLowerCase()}`,
+    };
+  }
+
   if (parts[0] !== "JIWARv2") throw new Error("كود غير صالح");
 
   if (parts.length === 4) {
@@ -67,6 +102,16 @@ async function hmacSign(message: string, secret: string): Promise<string> {
   );
   const sig = await crypto.subtle.sign("HMAC", key, enc.encode(message));
   return Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function hmacSignCompact(message: string, secret: string): Promise<string> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw", enc.encode(secret),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(message));
+  return base64Url(new Uint8Array(sig).slice(0, 20));
 }
 
 async function resolveCustomer(admin: ReturnType<typeof createClient>, parsed: ParsedQrToken) {
@@ -130,9 +175,12 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: "ليس لديك حساب عميل" }, 400);
       }
       const ts = Math.floor(Date.now() / 1000);
-      const payload = `${customer.id}.${customer.user_id}.${ts}`;
-      const sig = await hmacSign(payload, SECRET);
-      const token = `JIWARv2.${customer.id}.${customer.user_id}.${ts}.${sig}`;
+      const compactCustomerId = uuidToCompact(customer.id);
+      const compactUserId = uuidToCompact(customer.user_id);
+      const ts36 = ts.toString(36);
+      const payload = `${compactCustomerId}.${compactUserId}.${ts36}`;
+      const sig = await hmacSignCompact(payload, SECRET);
+      const token = `JIWARv3.${compactCustomerId}.${compactUserId}.${ts36}.${sig}`;
       await logAudit(customer.id, null, "generated", null, "تم توليد كود ديناميكي", { ttl: TTL_SECONDS });
       return jsonResponse({ token, ttl: TTL_SECONDS, expires_at: ts + TTL_SECONDS });
     }
