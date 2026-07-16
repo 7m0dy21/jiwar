@@ -63,18 +63,23 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
     setLoading(true);
     try {
       const trimmed = code.trim();
-      if (!trimmed.startsWith("JIWARv2.")) {
+      const dynamicToken = trimmed.match(/JIWARv[23]\.[A-Za-z0-9._-]+/)?.[0] || trimmed;
+      if (dynamicToken.startsWith("JIWARv2.")) {
+        toast.error("الكود قديم - اطلب من العميل إغلاق نافذة QR وفتحها مرة أخرى لتوليد كود جديد");
+        return;
+      }
+      if (!dynamicToken.startsWith("JIWARv2.") && !dynamicToken.startsWith("JIWARv3.")) {
         toast.error("كود غير صالح - يجب استخدام كود QR الديناميكي الآمن من تطبيق العميل");
         return;
       }
       const { data, error } = await supabase.functions.invoke("qr-pay", {
-        body: { action: "lookup", token: trimmed },
+        body: { action: "lookup", token: dynamicToken },
       });
       if (error || data?.error) {
         toast.error(data?.error || error?.message || "تعذر التعرف على العميل");
         return;
       }
-      setCustomerInfo({ ...data.customer, _dynamicToken: trimmed });
+      setCustomerInfo({ ...data.customer, _dynamicToken: dynamicToken });
       if (data.customer?.verification_reason) {
         setFailureReason(data.customer.verification_reason);
       }
@@ -212,7 +217,7 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
 
             <div>
               <Label className="font-cairo">كود QR الخاص بالعميل</Label>
-              <Input value={qrCode} onChange={(e) => setQrCode(e.target.value)} placeholder="JIWAR-xxxxxxxx" dir="ltr" className="mt-1" />
+              <Input value={qrCode} onChange={(e) => setQrCode(e.target.value)} placeholder="JIWARv3..." dir="ltr" className="mt-1" />
             </div>
             <Button onClick={handleLookup} disabled={loading} className="w-full bg-gradient-primary text-primary-foreground">
               {loading ? "جارٍ البحث..." : "بحث عن العميل"}
