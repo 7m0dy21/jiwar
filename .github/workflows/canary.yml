@@ -1,0 +1,89 @@
+name: Canary (staging)
+
+# Runs the same super-admin + RLS suite against a production-like staging
+# environment on a schedule. Catches drift that a merged PR did NOT catch —
+# e.g. someone edited RLS in the Lovable UI, or staging data changed such
+# that a role lookup now returns null.
+on:
+  schedule:
+    # Every 30 minutes.
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: canary-staging
+  cancel-in-progress: false
+
+jobs:
+  canary:
+    name: Canary — super admin can reach /admin on staging
+    runs-on: ubuntu-latest
+    env:
+      # Staging-specific secrets (separate from prod). Configure in
+      # GitHub → Settings → Secrets → Actions.
+      SUPABASE_URL: ${{ secrets.STAGING_SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.STAGING_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.STAGING_SUPABASE_SERVICE_ROLE_KEY }}
+      TEST_ADMIN_EMAIL: ${{ secrets.STAGING_ADMIN_EMAIL }}
+      TEST_ADMIN_PASS: ${{ secrets.STAGING_ADMIN_PASS }}
+      E2E_BASE_URL: ${{ secrets.STAGING_APP_URL }}
+      E2E_ADMIN_EMAIL: ${{ secrets.STAGING_ADMIN_EMAIL }}
+      E2E_ADMIN_PASS: ${{ secrets.STAGING_ADMIN_PASS }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Guard — required staging secrets
+        run: |
+          for v in SUPABASE_URL SUPABASE_ANON_KEY SUPABASE_SERVICE_ROLE_KEY \
+                   TEST_ADMIN_EMAIL TEST_ADMIN_PASS E2E_BASE_URL; do
+            eval "val=\${$v}"
+            if [ -z "$val" ]; then
+              echo "❌ Missing $v (STAGING_* secret). Configure it before running canaries."
+              exit 1
+            fi
+          done
+
+      - uses: denoland/setup-deno@v1
+        with: { deno-version: v1.x }
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+
+      - name: Install app deps
+        run: npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+
+      # 1. DB guardrails against STAGING db (RLS + grants unchanged).
+      - name: Canary — DB guardrails
+        run: deno run --allow-net --allow-env --allow-read scripts/db_guardrails.ts
+
+      # 2. Role access + edge case integration tests against staging DB.
+      - name: Canary — role_access + edge cases
+        run: |
+          deno test --allow-net --allow-env --allow-read \
+            supabase/functions/qr-pay/role_access_test.ts \
+            supabase/functions/qr-pay/role_edge_cases_test.ts
+
+      # 3. E2E against the deployed staging app URL (no local server).
+      - name: Install Playwright browsers
+        run: npx --yes playwright@1.47.0 install --with-deps chromium
+      - name: Canary — E2E super admin flows on staging
+        run: npx --yes playwright@1.47.0 test e2e/admin-routing.spec.ts --config=e2e/playwright.config.ts
+
+      - name: Upload traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: canary-playwright-report
+          path: |
+            e2e/test-results
+            e2e/playwright-report
+          if-no-files-found: ignore
+
+      # Optional: page an on-call channel on failure. Wire this to your Slack
+      # webhook secret to get instant alerts when a canary fails.
+      - name: Notify on failure
+        if: failure() && env.SLACK_WEBHOOK_URL != ''
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: |
+          curl -X POST -H 'Content-Type: application/json' \
+            --data "{\"text\":\":rotating_light: Jiwar staging canary failed — super admin routing / RLS regression. Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID\"}" \
+            "$SLACK_WEBHOOK_URL" || true
