@@ -130,7 +130,7 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
         return;
       }
       const check = validateJiwarV3(dynamicToken);
-      if (!check.ok) {
+      if (check.ok !== true) {
         toast.error(check.reason);
         return;
       }
