@@ -63,33 +63,21 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
     setLoading(true);
     try {
       const trimmed = code.trim();
-      // Only signed, time-limited dynamic tokens are accepted.
-      // Format: JIWARv2.<customerId>.<ts>.<sig>
       if (!trimmed.startsWith("JIWARv2.")) {
         toast.error("كود غير صالح - يجب استخدام كود QR الديناميكي الآمن من تطبيق العميل");
         return;
       }
-      const parts = trimmed.split(".");
-      if (parts.length !== 4) { toast.error("كود غير صالح"); return; }
-      const customerId = parts[1];
-      const ts = parseInt(parts[2], 10);
-      const ageSec = Math.floor(Date.now() / 1000) - ts;
-      if (ageSec > 60) { toast.error("انتهت صلاحية الكود - اطلب من العميل تحديثه"); return; }
-
-      const { data: custData, error: custError } = await supabase
-        .from("customers")
-        .select("id, available_balance, credit_limit, user_id, onboarding_completed")
-        .eq("id", customerId)
-        .single();
-      if (custError || !custData) { toast.error("العميل غير موجود"); return; }
-      if (!custData.onboarding_completed) { toast.error("لم يكمل العميل التحقق بعد"); return; }
-
-      const { data: profileData } = await supabase
-        .from("profiles").select("full_name").eq("user_id", custData.user_id).single();
-      setCustomerInfo({ ...custData, full_name: profileData?.full_name || "عميل", _dynamicToken: trimmed });
+      const { data, error } = await supabase.functions.invoke("qr-pay", {
+        body: { action: "lookup", token: trimmed },
+      });
+      if (error || data?.error) {
+        toast.error(data?.error || error?.message || "تعذر التعرف على العميل");
+        return;
+      }
+      setCustomerInfo({ ...data.customer, _dynamicToken: trimmed });
       setStep("confirm");
-    } catch {
-      toast.error("حدث خطأ في البحث");
+    } catch (e: any) {
+      toast.error(e?.message || "حدث خطأ في البحث");
     } finally {
       setLoading(false);
     }
