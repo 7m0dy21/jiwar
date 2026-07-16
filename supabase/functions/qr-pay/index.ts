@@ -317,12 +317,20 @@ Deno.serve(async (req) => {
       if (!cust?.user_id) throw new Error("العميل غير موجود - قد يكون الكود قديماً أو الحساب محذوفاً");
       if (!cust.onboarding_completed) throw new Error("لم يكمل العميل التحقق (نفاذ/سمة/نافذ)");
 
+      // Idempotency hash bound to token + merchant + amount
+      const hashBytes = await crypto.subtle.digest(
+        "SHA-256",
+        new TextEncoder().encode(`${token}|${merchantId}|${numAmount}`),
+      );
+      const qrTokenHash = base64Url(new Uint8Array(hashBytes));
+
       const { data: reqRow, error: reqErr } = await admin.from("payment_requests").insert({
         customer_id: cust.id,
         merchant_id: merchantId,
         customer_user_id: cust.user_id,
         merchant_user_id: userId,
         amount: numAmount,
+        qr_token_hash: qrTokenHash,
       }).select("id, expires_at").single();
       if (reqErr) throw new Error(reqErr.message);
 
