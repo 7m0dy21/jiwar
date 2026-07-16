@@ -327,6 +327,7 @@ export type Database = {
           is_active: boolean
           location_lat: number | null
           location_lng: number | null
+          pending_balance: number
           store_address: string | null
           store_name: string
           updated_at: string
@@ -341,6 +342,7 @@ export type Database = {
           is_active?: boolean
           location_lat?: number | null
           location_lng?: number | null
+          pending_balance?: number
           store_address?: string | null
           store_name?: string
           updated_at?: string
@@ -355,6 +357,7 @@ export type Database = {
           is_active?: boolean
           location_lat?: number | null
           location_lng?: number | null
+          pending_balance?: number
           store_address?: string | null
           store_name?: string
           updated_at?: string
@@ -494,6 +497,7 @@ export type Database = {
           id: string
           merchant_id: string
           merchant_user_id: string
+          qr_token_hash: string | null
           reason: string | null
           status: string
           transaction_id: string | null
@@ -508,6 +512,7 @@ export type Database = {
           id?: string
           merchant_id: string
           merchant_user_id: string
+          qr_token_hash?: string | null
           reason?: string | null
           status?: string
           transaction_id?: string | null
@@ -522,6 +527,7 @@ export type Database = {
           id?: string
           merchant_id?: string
           merchant_user_id?: string
+          qr_token_hash?: string | null
           reason?: string | null
           status?: string
           transaction_id?: string | null
@@ -745,6 +751,9 @@ export type Database = {
           description: string | null
           id: string
           merchant_id: string
+          qr_token_hash: string | null
+          settled_at: string | null
+          settlement_transfer_id: string | null
           status: Database["public"]["Enums"]["transaction_status"]
         }
         Insert: {
@@ -754,6 +763,9 @@ export type Database = {
           description?: string | null
           id?: string
           merchant_id: string
+          qr_token_hash?: string | null
+          settled_at?: string | null
+          settlement_transfer_id?: string | null
           status?: Database["public"]["Enums"]["transaction_status"]
         }
         Update: {
@@ -763,6 +775,9 @@ export type Database = {
           description?: string | null
           id?: string
           merchant_id?: string
+          qr_token_hash?: string | null
+          settled_at?: string | null
+          settlement_transfer_id?: string | null
           status?: Database["public"]["Enums"]["transaction_status"]
         }
         Relationships: [
@@ -785,6 +800,13 @@ export type Database = {
             columns: ["merchant_id"]
             isOneToOne: false
             referencedRelation: "merchants_public"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "transactions_settlement_transfer_id_fkey"
+            columns: ["settlement_transfer_id"]
+            isOneToOne: false
+            referencedRelation: "merchant_transfers"
             referencedColumns: ["id"]
           },
         ]
@@ -956,14 +978,24 @@ export type Database = {
         }
         Returns: string
       }
-      process_dynamic_qr_transaction: {
-        Args: {
-          p_amount: number
-          p_customer_id: string
-          p_merchant_user_id: string
-        }
-        Returns: string
-      }
+      process_dynamic_qr_transaction:
+        | {
+            Args: {
+              p_amount: number
+              p_customer_id: string
+              p_merchant_user_id: string
+            }
+            Returns: string
+          }
+        | {
+            Args: {
+              p_amount: number
+              p_customer_id: string
+              p_merchant_user_id: string
+              p_qr_token_hash?: string
+            }
+            Returns: string
+          }
       process_transaction: {
         Args: { p_amount: number; p_customer_id: string; p_merchant_id: string }
         Returns: string
