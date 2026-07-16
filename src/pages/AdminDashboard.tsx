@@ -11,8 +11,9 @@ import AdminManagers from "@/components/admin/AdminManagers";
 import AdminRiskDashboard from "@/components/admin/AdminRiskDashboard";
 import AdminTransactionLimits from "@/components/admin/AdminTransactionLimits";
 import AdminErrorReports from "@/components/admin/AdminErrorReports";
+import AdminRoleAudit from "@/components/admin/AdminRoleAudit";
 
-type AdminTab = "overview" | "merchants" | "customers" | "transactions" | "managers" | "risk" | "limits" | "errors";
+type AdminTab = "overview" | "merchants" | "customers" | "transactions" | "managers" | "risk" | "limits" | "errors" | "role-audit";
 
 const AdminDashboard = () => {
   const { user, loading, role } = useAuth();
@@ -37,6 +38,7 @@ const AdminDashboard = () => {
       case "risk": return <div className="p-6"><AdminRiskDashboard /></div>;
       case "limits": return <div className="p-6"><AdminTransactionLimits /></div>;
       case "errors": return <AdminErrorReports />;
+      case "role-audit": return <AdminRoleAudit />;
       case "managers": return <AdminManagers />;
     }
   };

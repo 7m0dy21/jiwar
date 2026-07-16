@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, ReactNode, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { User, Session } from "@supabase/supabase-js";
-import { logError, LoggedError } from "@/lib/errorLogger";
+import { logError, LoggedError, generateCorrelationId } from "@/lib/errorLogger";
 
 export interface RoleFetchError {
   correlationId: string;
@@ -73,7 +73,40 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return { role: sorted[0].role, error: null };
   };
 
+  const auditRoleCheck = async (
+    correlationId: string,
+    decision: "success" | "empty" | "error" | "retry_success",
+    payload: {
+      resolvedRole?: string | null;
+      reason?: string | null;
+      code?: string | null;
+      attempts?: number;
+      latencyMs?: number | null;
+      details?: Record<string, unknown> | null;
+    }
+  ) => {
+    try {
+      await supabase.rpc("log_role_check" as never, {
+        _correlation_id: correlationId,
+        _decision: decision,
+        _resolved_role: payload.resolvedRole ?? null,
+        _reason: payload.reason ?? null,
+        _code: payload.code ?? null,
+        _attempts: payload.attempts ?? 1,
+        _latency_ms: payload.latencyMs ?? null,
+        _route: typeof window !== "undefined" ? window.location.pathname : null,
+        _user_agent: typeof navigator !== "undefined" ? navigator.userAgent : null,
+        _details: (payload.details ?? null) as never,
+      } as never);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn("[auth] log_role_check failed", e);
+    }
+  };
+
   const loadRoleWithRetry = async (userId: string, requestId: number) => {
+    const correlationId = generateCorrelationId();
+    const startedAt = Date.now();
     let lastError: FetchRoleResult["error"] = null;
     let attempts = 0;
     for (let attempt = 0; attempt < MAX_AUTO_RETRIES; attempt++) {
@@ -83,6 +116,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (!error) {
         setRole(r);
         setRoleError(null);
+        void auditRoleCheck(
+          correlationId,
+          r === null ? "empty" : attempts > 1 ? "retry_success" : "success",
+          {
+            resolvedRole: r,
+            attempts,
+            latencyMs: Date.now() - startedAt,
+            reason:
+              r === null
+                ? "user_roles returned no rows — defaulted to unauthenticated view"
+                : `resolved to ${r} in ${attempts} attempt(s)`,
+          }
+        );
         return;
       }
       lastError = error;
@@ -99,7 +145,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       details: {
         attempts,
         hint: lastError?.hint ?? null,
+        correlationId,
       },
+    });
+
+    void auditRoleCheck(correlationId, "error", {
+      reason: lastError?.message ?? "role fetch failed after retries",
+      code: lastError?.code ?? "ROLE_FETCH_FAILED",
+      attempts,
+      latencyMs: Date.now() - startedAt,
+      details: { hint: lastError?.hint ?? null, errorCorrelationId: logged.correlationId },
     });
 
     setRole(null);

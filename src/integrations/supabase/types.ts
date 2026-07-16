@@ -517,6 +517,54 @@ export type Database = {
         }
         Relationships: []
       }
+      role_check_audit: {
+        Row: {
+          attempts: number
+          code: string | null
+          correlation_id: string
+          created_at: string
+          decision: string
+          details: Json | null
+          id: string
+          latency_ms: number | null
+          reason: string | null
+          resolved_role: string | null
+          route: string | null
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          attempts?: number
+          code?: string | null
+          correlation_id: string
+          created_at?: string
+          decision: string
+          details?: Json | null
+          id?: string
+          latency_ms?: number | null
+          reason?: string | null
+          resolved_role?: string | null
+          route?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          attempts?: number
+          code?: string | null
+          correlation_id?: string
+          created_at?: string
+          decision?: string
+          details?: Json | null
+          id?: string
+          latency_ms?: number | null
+          reason?: string | null
+          resolved_role?: string | null
+          route?: string | null
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       transaction_limits: {
         Row: {
           daily_limit: number
@@ -654,6 +702,7 @@ export type Database = {
       }
     }
     Functions: {
+      _ci_db_guardrails_probe: { Args: never; Returns: Json }
       get_effective_limits: {
         Args: { p_entity_id: string; p_entity_type: string }
         Returns: {
@@ -678,6 +727,21 @@ export type Database = {
           p_merchant_id: string
           p_metadata?: Json
           p_reason?: string
+        }
+        Returns: string
+      }
+      log_role_check: {
+        Args: {
+          _attempts?: number
+          _code?: string
+          _correlation_id: string
+          _decision: string
+          _details?: Json
+          _latency_ms?: number
+          _reason?: string
+          _resolved_role?: string
+          _route?: string
+          _user_agent?: string
         }
         Returns: string
       }
