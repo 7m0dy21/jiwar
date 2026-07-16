@@ -60,7 +60,7 @@ export const logError = async (input: LogErrorInput): Promise<LoggedError> => {
   });
 
   try {
-    await supabase.from("error_logs").insert([payload]);
+    await supabase.from("error_logs").insert([payload as any]);
   } catch (e) {
     // eslint-disable-next-line no-console
     console.error("errorLogger: failed to persist error log", e);
