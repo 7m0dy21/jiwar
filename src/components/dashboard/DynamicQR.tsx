@@ -66,11 +66,11 @@ const DynamicQR = ({ customerName }: DynamicQRProps) => {
           <DialogTitle className="font-cairo text-xl">كود الدفع الآمن</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col items-center gap-4 py-4">
-          <div className="bg-white p-6 rounded-2xl relative">
+          <div className="bg-white p-4 rounded-2xl relative">
             {token ? (
-              <QRCodeSVG value={token} size={220} level="H" />
+              <QRCodeSVG value={token} size={280} level="L" includeMargin />
             ) : (
-              <div className="w-[220px] h-[220px] flex items-center justify-center text-muted-foreground">
+              <div className="w-[280px] h-[280px] flex items-center justify-center text-muted-foreground">
                 {loading ? "جارٍ التوليد..." : "..."}
               </div>
             )}
