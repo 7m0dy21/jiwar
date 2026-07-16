@@ -42,6 +42,7 @@ const AdminDashboard = () => {
       case "errors": return <AdminErrorReports />;
       case "role-audit": return <AdminRoleAudit />;
       case "qr-audit": return <AdminQRAudit />;
+      case "verification-audit": return <AdminVerificationAudit />;
       case "managers": return <AdminManagers />;
     }
   };
