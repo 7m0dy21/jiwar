@@ -379,6 +379,39 @@ export type Database = {
           },
         ]
       }
+      notification_preferences: {
+        Row: {
+          created_at: string
+          fcm_tokens: string[]
+          id: string
+          in_app_enabled: boolean
+          platform: string | null
+          push_enabled: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          fcm_tokens?: string[]
+          id?: string
+          in_app_enabled?: boolean
+          platform?: string | null
+          push_enabled?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          fcm_tokens?: string[]
+          id?: string
+          in_app_enabled?: boolean
+          platform?: string | null
+          push_enabled?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           created_at: string
