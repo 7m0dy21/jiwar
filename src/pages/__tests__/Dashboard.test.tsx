@@ -126,4 +126,16 @@ describe("Dashboard routing guard", () => {
     expect(screen.getByTestId("auth-page")).toBeInTheDocument();
     expect(screen.queryByTestId("customer-dashboard")).not.toBeInTheDocument();
   });
+
+  // Regression guard: super admin must ALWAYS land on /admin.
+  it("NEVER routes super admin to customer view", () => {
+    mockedUseAuth.mockReturnValue({
+      user: fakeUser, session: null, loading: false, role: "admin",
+      roleError: null, retryRole: vi.fn(), signOut: vi.fn(),
+    } as any);
+    renderDashboard();
+    expect(screen.getByTestId("admin-dashboard")).toBeInTheDocument();
+    expect(screen.queryByTestId("customer-dashboard")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("merchant-dashboard")).not.toBeInTheDocument();
+  });
 });
