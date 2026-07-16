@@ -23,48 +23,45 @@ const OnboardingFlow = ({ customerId, status, onComplete }: OnboardingFlowProps)
 
   const progress = step === "nafath" ? 0 : step === "simah" ? 33 : step === "nafith" ? 66 : 100;
 
-  const verifyNafath = async () => {
+  const runStep = async (which: "nafath" | "simah" | "nafith") => {
     setLoading(true);
-    await new Promise((r) => setTimeout(r, 1500));
-    await supabase.from("customer_verifications").insert({
-      customer_id: customerId, provider: "nafath", status: "approved",
-      reference: "NAF-" + Math.random().toString(36).slice(2, 10).toUpperCase(),
-      details: { method: "mock", verified_at: new Date().toISOString() },
-    });
-    await supabase.from("customers").update({ nafath_verified: true }).eq("id", customerId);
-    setLoading(false);
-    toast.success("تم التحقق عبر نفاذ ✓");
-    setStep("simah");
+    try {
+      await new Promise((r) => setTimeout(r, 1200));
+      const { data, error } = await supabase.functions.invoke("verify-onboarding", {
+        body: { step: which },
+      });
+      if (error || (data as any)?.error) {
+        throw new Error((data as any)?.error || error?.message || "فشل التحقق");
+      }
+      return data as any;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const verifyNafath = async () => {
+    try {
+      await runStep("nafath");
+      toast.success("تم التحقق عبر نفاذ ✓");
+      setStep("simah");
+    } catch (e: any) { toast.error(e.message); }
   };
 
   const verifySimah = async () => {
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 1500));
-    const score = 650 + Math.floor(Math.random() * 200);
-    await supabase.from("customer_verifications").insert({
-      customer_id: customerId, provider: "simah", status: "approved",
-      reference: "SIM-" + Math.random().toString(36).slice(2, 10).toUpperCase(),
-      details: { score, method: "mock" },
-    });
-    await supabase.from("customers").update({ simah_score: score }).eq("id", customerId);
-    setLoading(false);
-    toast.success(`تم الفحص الائتماني عبر سمة ✓ النقاط: ${score}`);
-    setStep("nafith");
+    try {
+      const res = await runStep("simah");
+      toast.success(`تم الفحص الائتماني عبر سمة ✓ النقاط: ${res?.score ?? ""}`);
+      setStep("nafith");
+    } catch (e: any) { toast.error(e.message); }
   };
 
   const signNafith = async () => {
-    setLoading(true);
-    await new Promise((r) => setTimeout(r, 1500));
-    await supabase.from("customer_verifications").insert({
-      customer_id: customerId, provider: "nafith", status: "approved",
-      reference: "NFZ-" + Math.random().toString(36).slice(2, 10).toUpperCase(),
-      details: { signed_at: new Date().toISOString(), method: "mock" },
-    });
-    await supabase.from("customers").update({ nafith_signed: true, onboarding_completed: true }).eq("id", customerId);
-    setLoading(false);
-    toast.success("تم توقيع السند الإلكتروني ✓");
-    setStep("done");
-    setTimeout(() => { setOpen(false); onComplete(); }, 1500);
+    try {
+      await runStep("nafith");
+      toast.success("تم توقيع السند الإلكتروني ✓");
+      setStep("done");
+      setTimeout(() => { setOpen(false); onComplete(); }, 1500);
+    } catch (e: any) { toast.error(e.message); }
   };
 
   return (

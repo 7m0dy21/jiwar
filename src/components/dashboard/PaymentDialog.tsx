@@ -32,16 +32,15 @@ const PaymentDialog = ({ customerId, owedAmount, onSuccess }: PaymentDialogProps
 
     setLoading(true);
     try {
-      const { error } = await supabase.rpc("make_payment", {
-        p_customer_id: customerId,
-        p_amount: numAmount,
-        p_payment_method: method,
+      const { data, error } = await supabase.functions.invoke("make-payment", {
+        body: { customer_id: customerId, amount: numAmount, payment_method: method },
       });
 
-      if (error) {
-        toast.error(error.message);
+      if (error || (data as any)?.error) {
+        toast.error(((data as any)?.error) || error?.message || "فشل السداد");
         return;
       }
+
 
       toast.success("تم السداد بنجاح! ✅");
       setOpen(false);

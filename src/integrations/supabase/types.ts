@@ -585,6 +585,8 @@ export type Database = {
           created_at: string | null
           id: string | null
           is_active: boolean | null
+          location_lat: number | null
+          location_lng: number | null
           store_address: string | null
           store_name: string | null
         }
@@ -592,6 +594,8 @@ export type Database = {
           created_at?: string | null
           id?: string | null
           is_active?: boolean | null
+          location_lat?: number | null
+          location_lng?: number | null
           store_address?: string | null
           store_name?: string | null
         }
@@ -599,6 +603,8 @@ export type Database = {
           created_at?: string | null
           id?: string | null
           is_active?: boolean | null
+          location_lat?: number | null
+          location_lng?: number | null
           store_address?: string | null
           store_name?: string | null
         }
