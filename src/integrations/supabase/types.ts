@@ -810,6 +810,57 @@ export type Database = {
         }
         Relationships: []
       }
+      verification_audit_log: {
+        Row: {
+          action: string
+          actor_role: string
+          actor_user_id: string | null
+          created_at: string
+          customer_id: string | null
+          details: Json | null
+          id: string
+          new_status: string | null
+          old_status: string | null
+          outcome: string
+          provider: string | null
+          reason: string | null
+          source: string | null
+          verification_id: string | null
+        }
+        Insert: {
+          action: string
+          actor_role: string
+          actor_user_id?: string | null
+          created_at?: string
+          customer_id?: string | null
+          details?: Json | null
+          id?: string
+          new_status?: string | null
+          old_status?: string | null
+          outcome: string
+          provider?: string | null
+          reason?: string | null
+          source?: string | null
+          verification_id?: string | null
+        }
+        Update: {
+          action?: string
+          actor_role?: string
+          actor_user_id?: string | null
+          created_at?: string
+          customer_id?: string | null
+          details?: Json | null
+          id?: string
+          new_status?: string | null
+          old_status?: string | null
+          outcome?: string
+          provider?: string | null
+          reason?: string | null
+          source?: string | null
+          verification_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       merchants_public: {
@@ -884,6 +935,15 @@ export type Database = {
           _resolved_role?: string
           _route?: string
           _user_agent?: string
+        }
+        Returns: string
+      }
+      log_verification_failure: {
+        Args: {
+          p_customer_id: string
+          p_details?: Json
+          p_provider: string
+          p_reason: string
         }
         Returns: string
       }

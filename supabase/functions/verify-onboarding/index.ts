@@ -43,50 +43,67 @@ Deno.serve(async (req) => {
       .select("id")
       .eq("user_id", userId)
       .maybeSingle();
-    if (custErr || !customer) return json({ error: "لا يوجد حساب عميل" }, 404);
+    if (custErr || !customer) {
+      await admin.rpc("log_verification_failure", {
+        p_customer_id: null,
+        p_provider: step,
+        p_reason: "لا يوجد حساب عميل",
+        p_details: { user_id: userId },
+      });
+      return json({ error: "لا يوجد حساب عميل" }, 404);
+    }
     const customerId = customer.id;
 
-    if (step === "nafath") {
-      // TODO: replace with real Nafath verification result
+    try {
+      if (step === "nafath") {
+        // TODO: replace with real Nafath verification result
+        await admin.from("customer_verifications").insert({
+          customer_id: customerId,
+          provider: "nafath",
+          status: "approved",
+          reference: "NAF-" + crypto.randomUUID().slice(0, 8).toUpperCase(),
+          details: { method: "mock", verified_at: new Date().toISOString() },
+        });
+        await admin.from("customers").update({ nafath_verified: true }).eq("id", customerId);
+        return json({ ok: true }, 200);
+      }
+
+      if (step === "simah") {
+        // TODO: replace with real SIMAH credit-score lookup
+        const score = 650 + Math.floor(Math.random() * 200);
+        await admin.from("customer_verifications").insert({
+          customer_id: customerId,
+          provider: "simah",
+          status: "approved",
+          reference: "SIM-" + crypto.randomUUID().slice(0, 8).toUpperCase(),
+          details: { score, method: "mock" },
+        });
+        await admin.from("customers").update({ simah_score: score }).eq("id", customerId);
+        return json({ ok: true, score }, 200);
+      }
+
+      // nafith
       await admin.from("customer_verifications").insert({
         customer_id: customerId,
-        provider: "nafath",
+        provider: "nafith",
         status: "approved",
-        reference: "NAF-" + crypto.randomUUID().slice(0, 8).toUpperCase(),
-        details: { method: "mock", verified_at: new Date().toISOString() },
+        reference: "NFZ-" + crypto.randomUUID().slice(0, 8).toUpperCase(),
+        details: { signed_at: new Date().toISOString(), method: "mock" },
       });
-      await admin.from("customers").update({ nafath_verified: true }).eq("id", customerId);
+      await admin
+        .from("customers")
+        .update({ nafith_signed: true, onboarding_completed: true })
+        .eq("id", customerId);
       return json({ ok: true }, 200);
-    }
-
-    if (step === "simah") {
-      // TODO: replace with real SIMAH credit-score lookup
-      const score = 650 + Math.floor(Math.random() * 200);
-      await admin.from("customer_verifications").insert({
-        customer_id: customerId,
-        provider: "simah",
-        status: "approved",
-        reference: "SIM-" + crypto.randomUUID().slice(0, 8).toUpperCase(),
-        details: { score, method: "mock" },
+    } catch (innerErr: any) {
+      await admin.rpc("log_verification_failure", {
+        p_customer_id: customerId,
+        p_provider: step,
+        p_reason: innerErr?.message ?? "فشل التحقق",
+        p_details: { user_id: userId, error: String(innerErr) },
       });
-      await admin.from("customers").update({ simah_score: score }).eq("id", customerId);
-      return json({ ok: true, score }, 200);
+      return json({ error: innerErr?.message ?? "فشل التحقق" }, 500);
     }
-
-    // nafith
-    // TODO: replace with real Nafith e-signature confirmation
-    await admin.from("customer_verifications").insert({
-      customer_id: customerId,
-      provider: "nafith",
-      status: "approved",
-      reference: "NFZ-" + crypto.randomUUID().slice(0, 8).toUpperCase(),
-      details: { signed_at: new Date().toISOString(), method: "mock" },
-    });
-    await admin
-      .from("customers")
-      .update({ nafith_signed: true, onboarding_completed: true })
-      .eq("id", customerId);
-    return json({ ok: true }, 200);
   } catch (err: any) {
     return json({ error: err?.message ?? "خطأ داخلي" }, 500);
   }
