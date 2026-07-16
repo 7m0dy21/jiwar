@@ -134,6 +134,36 @@ export type Database = {
         }
         Relationships: []
       }
+      device_tokens: {
+        Row: {
+          created_at: string
+          id: string
+          label: string | null
+          last_seen_at: string
+          platform: string | null
+          token: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          label?: string | null
+          last_seen_at?: string
+          platform?: string | null
+          token: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          label?: string | null
+          last_seen_at?: string
+          platform?: string | null
+          token?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       error_logs: {
         Row: {
           code: string | null
@@ -387,6 +417,7 @@ export type Database = {
           in_app_enabled: boolean
           platform: string | null
           push_enabled: boolean
+          type_preferences: Json
           updated_at: string
           user_id: string
         }
@@ -397,6 +428,7 @@ export type Database = {
           in_app_enabled?: boolean
           platform?: string | null
           push_enabled?: boolean
+          type_preferences?: Json
           updated_at?: string
           user_id: string
         }
@@ -407,6 +439,7 @@ export type Database = {
           in_app_enabled?: boolean
           platform?: string | null
           push_enabled?: boolean
+          type_preferences?: Json
           updated_at?: string
           user_id?: string
         }
@@ -414,28 +447,37 @@ export type Database = {
       }
       notifications: {
         Row: {
+          channel: string
           created_at: string
+          delivery_status: string
           id: string
           is_read: boolean
           message: string
+          metadata: Json | null
           title: string
           type: string
           user_id: string
         }
         Insert: {
+          channel?: string
           created_at?: string
+          delivery_status?: string
           id?: string
           is_read?: boolean
           message: string
+          metadata?: Json | null
           title: string
           type?: string
           user_id: string
         }
         Update: {
+          channel?: string
           created_at?: string
+          delivery_status?: string
           id?: string
           is_read?: boolean
           message?: string
+          metadata?: Json | null
           title?: string
           type?: string
           user_id?: string
@@ -873,6 +915,7 @@ export type Database = {
         Args: { p_approve: boolean; p_request_id: string }
         Returns: Json
       }
+      send_test_notification: { Args: { p_token?: string }; Returns: string }
     }
     Enums: {
       app_role: "admin" | "merchant" | "customer"
