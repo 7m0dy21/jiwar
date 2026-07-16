@@ -896,6 +896,7 @@ export type Database = {
     }
     Functions: {
       _ci_db_guardrails_probe: { Args: never; Returns: Json }
+      _ci_security_scan_probe: { Args: never; Returns: Json }
       get_effective_limits: {
         Args: { p_entity_id: string; p_entity_type: string }
         Returns: {
