@@ -17,10 +17,9 @@ const NearbyMerchants = () => {
   useEffect(() => {
     const fetchMerchants = async () => {
       setLoading(true);
-      const { data } = await supabase
-        .from("merchants")
+      const { data } = await (supabase as any)
+        .from("merchants_public")
         .select("id, store_name, store_address, is_active")
-        .eq("is_active", true)
         .order("store_name");
       setMerchants(data || []);
       setLoading(false);
