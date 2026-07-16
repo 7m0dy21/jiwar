@@ -101,7 +101,7 @@ Deno.serve(async (req) => {
     const results: any[] = [];
     const invalidTokens: string[] = [];
 
-    for (const token of pref.fcm_tokens as string[]) {
+    for (const token of tokensToSend) {
       const payload = {
         message: {
           token,
@@ -115,24 +115,29 @@ Deno.serve(async (req) => {
       };
       const r = await fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
         method: "POST",
-        headers: {
-          "Authorization": `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
+        headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       const rj = await r.json().catch(() => ({}));
       results.push({ token: token.slice(0, 12) + "…", ok: r.ok, status: r.status });
-      // Clean up unregistered/invalid tokens
       const err = rj?.error?.details?.[0]?.errorCode || rj?.error?.status;
       if (!r.ok && (err === "UNREGISTERED" || err === "INVALID_ARGUMENT" || r.status === 404)) {
         invalidTokens.push(token);
       }
     }
 
-    if (invalidTokens.length) {
-      const remaining = (pref.fcm_tokens as string[]).filter((t) => !invalidTokens.includes(t));
+    if (invalidTokens.length && !isTargeted) {
+      const remaining = (pref?.fcm_tokens as string[] || []).filter((t) => !invalidTokens.includes(t));
       await admin.from("notification_preferences").update({ fcm_tokens: remaining }).eq("user_id", user_id);
+      await admin.from("device_tokens").delete().in("token", invalidTokens);
+    }
+
+    const anyOk = results.some((r) => r.ok);
+    if (notification_id) {
+      await admin.from("notifications").update({
+        delivery_status: anyOk ? "delivered" : "failed",
+        metadata: { push_results: results },
+      }).eq("id", notification_id);
     }
 
     return new Response(JSON.stringify({ ok: true, sent: results.length, results }), {
