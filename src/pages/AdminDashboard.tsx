@@ -13,8 +13,9 @@ import AdminTransactionLimits from "@/components/admin/AdminTransactionLimits";
 import AdminErrorReports from "@/components/admin/AdminErrorReports";
 import AdminRoleAudit from "@/components/admin/AdminRoleAudit";
 import AdminQRAudit from "@/components/admin/AdminQRAudit";
+import AdminVerificationAudit from "@/components/admin/AdminVerificationAudit";
 
-type AdminTab = "overview" | "merchants" | "customers" | "transactions" | "managers" | "risk" | "limits" | "errors" | "role-audit" | "qr-audit";
+type AdminTab = "overview" | "merchants" | "customers" | "transactions" | "managers" | "risk" | "limits" | "errors" | "role-audit" | "qr-audit" | "verification-audit";
 
 const AdminDashboard = () => {
   const { user, loading, role } = useAuth();
