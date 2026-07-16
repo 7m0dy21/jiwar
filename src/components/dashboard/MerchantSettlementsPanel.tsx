@@ -9,6 +9,8 @@ const MerchantSettlementsPanel = ({ merchantId }: Props) => {
   const [todayCount, setTodayCount] = useState(0);
   const [todayTotal, setTodayTotal] = useState(0);
   const [monthDeferred, setMonthDeferred] = useState(0);
+  const [pendingBalance, setPendingBalance] = useState(0);
+  const [recentTx, setRecentTx] = useState<any[]>([]);
   const [transfers, setTransfers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -19,18 +21,32 @@ const MerchantSettlementsPanel = ({ merchantId }: Props) => {
       const startToday = new Date(); startToday.setHours(0,0,0,0);
       const startMonth = new Date(); startMonth.setDate(1); startMonth.setHours(0,0,0,0);
 
-      const [today, month, tr] = await Promise.all([
+      const [today, month, tr, mer, recent] = await Promise.all([
         supabase.from("transactions").select("amount").eq("merchant_id", merchantId).eq("status","completed").gte("created_at", startToday.toISOString()),
         supabase.from("transactions").select("amount").eq("merchant_id", merchantId).eq("status","completed").gte("created_at", startMonth.toISOString()),
         supabase.from("merchant_transfers").select("*").eq("merchant_id", merchantId).gte("created_at", startMonth.toISOString()).order("created_at", { ascending: false }),
+        supabase.from("merchants").select("pending_balance").eq("id", merchantId).maybeSingle(),
+        supabase.from("transactions").select("id, amount, created_at, settled_at, settlement_transfer_id").eq("merchant_id", merchantId).eq("status","completed").order("created_at", { ascending: false }).limit(8),
       ]);
       setTodayCount((today.data || []).length);
       setTodayTotal((today.data || []).reduce((s, r: any) => s + Number(r.amount), 0));
       setMonthDeferred((month.data || []).reduce((s, r: any) => s + Number(r.amount), 0));
       setTransfers(tr.data || []);
+      setPendingBalance(Number((mer.data as any)?.pending_balance || 0));
+      setRecentTx(recent.data || []);
       setLoading(false);
     };
     load();
+
+    // Realtime live pending balance
+    const ch = supabase
+      .channel(`merchant-live-${merchantId}`)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "merchants", filter: `id=eq.${merchantId}` },
+        (payload: any) => setPendingBalance(Number(payload.new.pending_balance || 0)))
+      .on("postgres_changes", { event: "*", schema: "public", table: "transactions", filter: `merchant_id=eq.${merchantId}` },
+        () => load())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
   }, [merchantId]);
 
   const settled = transfers.filter((t) => t.status === "completed").reduce((s, t) => s + Number(t.amount), 0);
@@ -38,6 +54,7 @@ const MerchantSettlementsPanel = ({ merchantId }: Props) => {
   const remaining = Math.max(0, monthDeferred - settled - pending);
 
   const stats = [
+    { icon: Wallet, label: "الرصيد المعلّق الفوري", value: `${pendingBalance.toFixed(2)} ر.س`, color: "text-jiwar-green" },
     { icon: DollarSign, label: "عمليات اليوم", value: todayCount, color: "text-primary" },
     { icon: TrendingUp, label: "إجمالي اليوم", value: `${todayTotal.toFixed(2)} ر.س`, color: "text-jiwar-blue" },
     { icon: Calendar, label: "المبيعات الآجلة (الشهر)", value: `${monthDeferred.toFixed(2)} ر.س`, color: "text-jiwar-gold" },
