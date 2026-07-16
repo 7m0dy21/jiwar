@@ -60,6 +60,26 @@ async function hmacSign(message: string, secret: string): Promise<string> {
     .map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+function uuidToCompact(uuid: string): string {
+  return uuid.replace(/-/g, "").toLowerCase();
+}
+
+function base64Url(bytes: Uint8Array): string {
+  let binary = "";
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+async function hmacSignCompact(message: string, secret: string): Promise<string> {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw", enc.encode(secret),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, enc.encode(message));
+  return base64Url(new Uint8Array(sig).slice(0, 20));
+}
+
 interface Fixtures {
   customerUserId: string;
   customerId: string;
@@ -165,11 +185,14 @@ Deno.test("E2E expired token: merchant lookup fails with expiry message", async 
   const db = admin();
   const f = await seed(db, { onboarded: true });
   try {
-    // Forge a token with a past timestamp (>TTL=60s ago)
+    // Forge a compact v3 token with a past timestamp (>TTL=60s ago)
     const ts = Math.floor(Date.now() / 1000) - 120;
-    const payload = `${f.customerId}.${f.customerUserId}.${ts}`;
-    const sig = await hmacSign(payload, QR_SECRET);
-    const token = `JIWARv2.${f.customerId}.${f.customerUserId}.${ts}.${sig}`;
+    const customerId = uuidToCompact(f.customerId);
+    const userId = uuidToCompact(f.customerUserId);
+    const ts36 = ts.toString(36);
+    const payload = `${customerId}.${userId}.${ts36}`;
+    const sig = await hmacSignCompact(payload, QR_SECRET);
+    const token = `JIWARv3.${customerId}.${userId}.${ts36}.${sig}`;
 
     const merJwt = await signIn(f.merchantEmail, f.password);
     const look = await callQrPay(merJwt, { action: "lookup", token });
@@ -235,13 +258,15 @@ Deno.test("E2E stale customer_id relink: merchant still identifies customer via 
   const db = admin();
   const f = await seed(db, { onboarded: true });
   try {
-    // Forge a token that points to a NON-existent customer_id but the real user_id.
+    // Forge a compact v3 token that points to a NON-existent customer_id but the real user_id.
     // The resolveCustomer fallback should relink via user_id.
-    const fakeCustomerId = "00000000-0000-0000-0000-000000000000";
+    const fakeCustomerId = uuidToCompact("00000000-0000-0000-0000-000000000000");
+    const userId = uuidToCompact(f.customerUserId);
     const ts = Math.floor(Date.now() / 1000);
-    const payload = `${fakeCustomerId}.${f.customerUserId}.${ts}`;
-    const sig = await hmacSign(payload, QR_SECRET);
-    const token = `JIWARv2.${fakeCustomerId}.${f.customerUserId}.${ts}.${sig}`;
+    const ts36 = ts.toString(36);
+    const payload = `${fakeCustomerId}.${userId}.${ts36}`;
+    const sig = await hmacSignCompact(payload, QR_SECRET);
+    const token = `JIWARv3.${fakeCustomerId}.${userId}.${ts36}.${sig}`;
 
     const merJwt = await signIn(f.merchantEmail, f.password);
     const look = await callQrPay(merJwt, { action: "lookup", token });
