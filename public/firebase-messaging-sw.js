@@ -1,16 +1,14 @@
 // Firebase Cloud Messaging service worker
-// This worker receives background push notifications.
+// Receives background push notifications.
 importScripts("https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js");
 importScripts("https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js");
 
-// NOTE: These values are the *public* Firebase Web config from your Firebase project.
-// Replace with your project's config from Firebase Console → Project Settings → General.
-self.FIREBASE_CONFIG = self.FIREBASE_CONFIG || {
-  apiKey: "REPLACE_ME",
-  authDomain: "REPLACE_ME.firebaseapp.com",
-  projectId: "REPLACE_ME",
-  messagingSenderId: "REPLACE_ME",
-  appId: "REPLACE_ME",
+self.FIREBASE_CONFIG = {
+  apiKey: "AIzaSyA1bCYz9KTz8fjvsagFZPze6iD9mrMv2_Q",
+  authDomain: "jiwar-app-47e65.firebaseapp.com",
+  projectId: "jiwar-app-47e65",
+  messagingSenderId: "325628882573",
+  appId: "1:325628882573:web:36b4d98521d82246c2fcc4",
 };
 
 try {
@@ -40,6 +38,5 @@ try {
     );
   });
 } catch (e) {
-  // FCM not configured — worker stays inert
   console.warn("[fcm-sw] init skipped", e);
 }
