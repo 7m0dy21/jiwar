@@ -167,6 +167,8 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
     setCustomerInfo(null);
     setStep("scan");
     setFailureReason("");
+    setPendingRequestId(null);
+    setWaitingApproval(false);
   };
 
   return (
@@ -247,10 +249,16 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
                 <p className="text-sm text-destructive font-ibm">{failureReason}</p>
               </div>
             )}
+            {waitingApproval && (
+              <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 text-center">
+                <p className="text-sm font-cairo font-bold text-primary">بانتظار موافقة العميل...</p>
+                <p className="text-xs text-muted-foreground font-ibm mt-1">تظهر لدى العميل نافذة الموافقة أو الرفض</p>
+              </div>
+            )}
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => { setStep("scan"); setFailureReason(""); }} className="flex-1">رجوع</Button>
-              <Button onClick={handleProcess} disabled={loading} className="flex-1 bg-gradient-primary text-primary-foreground">
-                {loading ? "جارٍ التنفيذ..." : "تأكيد الدفع"}
+              <Button variant="outline" onClick={() => { setStep("scan"); setFailureReason(""); }} disabled={waitingApproval} className="flex-1">رجوع</Button>
+              <Button onClick={handleProcess} disabled={loading || waitingApproval} className="flex-1 bg-gradient-primary text-primary-foreground">
+                {waitingApproval ? "بانتظار العميل..." : loading ? "جارٍ الإرسال..." : "إرسال للعميل"}
               </Button>
             </div>
           </div>
