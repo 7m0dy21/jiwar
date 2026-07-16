@@ -98,6 +98,33 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
   const handleLookup = () => handleLookupWithCode(qrCode);
 
   const [failureReason, setFailureReason] = useState<string>("");
+  const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
+  const [waitingApproval, setWaitingApproval] = useState(false);
+
+  // Subscribe to the created request to see customer's decision in realtime
+  useEffect(() => {
+    if (!pendingRequestId) return;
+    const ch = supabase
+      .channel(`req-${pendingRequestId}`)
+      .on("postgres_changes",
+        { event: "UPDATE", schema: "public", table: "payment_requests", filter: `id=eq.${pendingRequestId}` },
+        (payload) => {
+          const row: any = payload.new;
+          if (row.status === "approved") {
+            toast.success(`تمت الموافقة! رقم العملية: ${String(row.transaction_id).slice(0, 8)}`);
+            setWaitingApproval(false); setPendingRequestId(null);
+            setOpen(false); resetState(); onSuccess();
+          } else if (row.status === "rejected") {
+            setFailureReason("رفض العميل الطلب"); toast.error("رفض العميل الطلب");
+            setWaitingApproval(false); setPendingRequestId(null);
+          } else if (row.status === "expired" || row.status === "failed") {
+            setFailureReason(row.reason || "فشل الطلب"); toast.error(row.reason || "فشل الطلب");
+            setWaitingApproval(false); setPendingRequestId(null);
+          }
+        })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [pendingRequestId]);
 
   const handleProcess = async () => {
     setFailureReason("");
@@ -120,8 +147,11 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
         const msg = data?.error || error?.message || "فشل الدفع";
         setFailureReason(msg); toast.error(msg); return;
       }
-      toast.success(`تمت العملية بنجاح! رقم: ${(data.transaction_id as string).slice(0, 8)}`);
-      setOpen(false); resetState(); onSuccess();
+      if (data?.pending && data?.request_id) {
+        setPendingRequestId(data.request_id);
+        setWaitingApproval(true);
+        toast.info("تم إرسال الطلب للعميل - بانتظار الموافقة");
+      }
     } catch (e: any) {
       const msg = e?.message || "حدث خطأ في تنفيذ العملية";
       setFailureReason(msg); toast.error(msg);
