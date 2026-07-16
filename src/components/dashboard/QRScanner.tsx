@@ -140,7 +140,11 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetState(); }}>
+    <Dialog open={open} onOpenChange={(v) => {
+      setOpen(v);
+      if (!v) resetState();
+      else setTimeout(() => { startCamera(); }, 150);
+    }}>
       <DialogTrigger asChild>
         <Button className="bg-gradient-primary text-primary-foreground font-bold text-lg px-8 py-6 rounded-xl glow-green">
           <ScanLine className="w-5 h-5 ml-2" />
