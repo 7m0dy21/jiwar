@@ -14,7 +14,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 
-type AdminTab = "overview" | "merchants" | "customers" | "transactions" | "managers" | "risk" | "limits" | "errors" | "role-audit" | "qr-audit";
+type AdminTab = "overview" | "merchants" | "customers" | "transactions" | "managers" | "risk" | "limits" | "errors" | "role-audit" | "qr-audit" | "verification-audit";
 
 const items: { title: string; id: AdminTab; icon: any }[] = [
   { title: "نظرة عامة", id: "overview", icon: LayoutDashboard },
@@ -26,6 +26,7 @@ const items: { title: string; id: AdminTab; icon: any }[] = [
   { title: "تقارير الأخطاء", id: "errors", icon: AlertTriangle },
   { title: "تدقيق الصلاحيات", id: "role-audit", icon: ShieldQuestion },
   { title: "تدقيق عمليات QR", id: "qr-audit", icon: ScanLine },
+  { title: "تدقيق التوثيق", id: "verification-audit", icon: FileCheck },
   { title: "المشرفين", id: "managers", icon: ShieldCheck },
 ];
 
