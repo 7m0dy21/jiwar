@@ -183,6 +183,10 @@ const MerchantDashboard = () => {
         </div>
 
         {merchant && <QRAuditLog scope="merchant" entityId={merchant.id} />}
+
+        <div className="mt-8">
+          <NotificationSettings />
+        </div>
       </main>
     </div>
   );
