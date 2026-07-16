@@ -75,6 +75,9 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
         return;
       }
       setCustomerInfo({ ...data.customer, _dynamicToken: trimmed });
+      if (data.customer?.verification_reason) {
+        setFailureReason(data.customer.verification_reason);
+      }
       setStep("confirm");
     } catch (e: any) {
       toast.error(e?.message || "حدث خطأ في البحث");
@@ -124,6 +127,10 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
     }
     if (!customerInfo?._dynamicToken) {
       const msg = "يجب استخدام كود QR الديناميكي الآمن";
+      setFailureReason(msg); toast.error(msg); return;
+    }
+    if (customerInfo?.can_pay === false) {
+      const msg = customerInfo?.verification_reason || "تم التعرف على العميل، لكنه غير جاهز للدفع";
       setFailureReason(msg); toast.error(msg); return;
     }
     setLoading(true);
