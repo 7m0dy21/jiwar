@@ -134,6 +134,48 @@ export type Database = {
         }
         Relationships: []
       }
+      error_logs: {
+        Row: {
+          code: string | null
+          correlation_id: string
+          created_at: string
+          details: Json | null
+          id: string
+          message: string
+          route: string | null
+          severity: string
+          source: string
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          code?: string | null
+          correlation_id: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          message: string
+          route?: string | null
+          severity?: string
+          source: string
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          code?: string | null
+          correlation_id?: string
+          created_at?: string
+          details?: Json | null
+          id?: string
+          message?: string
+          route?: string | null
+          severity?: string
+          source?: string
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       merchant_risk_alerts: {
         Row: {
           created_at: string
