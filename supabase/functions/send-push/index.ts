@@ -56,6 +56,7 @@ Deno.serve(async (req) => {
   try {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
     const SA_JSON = Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON");
     if (!SA_JSON) {
       return new Response(JSON.stringify({ skipped: true, reason: "FIREBASE_SERVICE_ACCOUNT_JSON missing" }), {
@@ -63,9 +64,58 @@ Deno.serve(async (req) => {
       });
     }
 
+    // ---- AuthN/AuthZ: require either service-role (internal trigger) or a valid user JWT ----
+    const authHeader = req.headers.get("Authorization") || "";
+    if (!authHeader.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const token = authHeader.slice("Bearer ".length).trim();
+    const isServiceRole = token === SERVICE_KEY;
+
+    let callerUserId: string | null = null;
+    if (!isServiceRole) {
+      const userClient = createClient(SUPABASE_URL, ANON_KEY, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: claimsData, error: claimsErr } = await userClient.auth.getClaims(token);
+      if (claimsErr || !claimsData?.claims?.sub) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      callerUserId = claimsData.claims.sub as string;
+    }
+
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
-    const { user_id, title, message, type, notification_id, target_token } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const { user_id, title, message, type, notification_id } = body;
+    let { target_token } = body;
     if (!user_id || !title) throw new Error("user_id and title required");
+
+    // Non-service callers can only push to themselves
+    if (!isServiceRole && user_id !== callerUserId) {
+      return new Response(JSON.stringify({ error: "Forbidden" }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Non-service callers may only target device tokens they own
+    if (!isServiceRole && target_token) {
+      const { data: owned } = await admin
+        .from("device_tokens")
+        .select("token")
+        .eq("user_id", callerUserId)
+        .eq("token", target_token)
+        .maybeSingle();
+      if (!owned) {
+        return new Response(JSON.stringify({ error: "Forbidden target_token" }), {
+          status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
+
 
     const { data: pref } = await admin
       .from("notification_preferences")
