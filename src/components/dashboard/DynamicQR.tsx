@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { QrCode, RefreshCw } from "lucide-react";
+import { QrCode, RefreshCw, Copy } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -91,6 +91,39 @@ const DynamicQR = ({ customerName }: DynamicQRProps) => {
           <p className="text-xs text-muted-foreground font-ibm">
             أظهر هذا الكود للتاجر - يتغير كل 60 ثانية لحمايتك
           </p>
+
+          {token && (
+            <div className="w-full space-y-2">
+              <p className="text-xs text-muted-foreground font-cairo text-right">
+                أو أعطِ التاجر الكود لإدخاله يدوياً:
+              </p>
+              <div className="flex items-stretch gap-2">
+                <div
+                  dir="ltr"
+                  className="flex-1 bg-muted rounded-lg p-2 text-[10px] font-mono break-all text-left max-h-24 overflow-auto select-all"
+                >
+                  {token}
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="shrink-0"
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(token);
+                      toast.success("تم نسخ الكود");
+                    } catch {
+                      toast.error("تعذر النسخ - اضغط مطولاً على الكود لتحديده");
+                    }
+                  }}
+                  aria-label="نسخ الكود"
+                >
+                  <Copy className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>
