@@ -1,0 +1,1 @@
+REVOKE EXECUTE ON FUNCTION public.respond_payment_request(UUID, BOOLEAN) FROM PUBLIC, anon;
