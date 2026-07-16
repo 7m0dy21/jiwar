@@ -98,6 +98,33 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
   const handleLookup = () => handleLookupWithCode(qrCode);
 
   const [failureReason, setFailureReason] = useState<string>("");
+  const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
+  const [waitingApproval, setWaitingApproval] = useState(false);
+
+  // Subscribe to the created request to see customer's decision in realtime
+  useEffect(() => {
+    if (!pendingRequestId) return;
+    const ch = supabase
+      .channel(`req-${pendingRequestId}`)
+      .on("postgres_changes",
+        { event: "UPDATE", schema: "public", table: "payment_requests", filter: `id=eq.${pendingRequestId}` },
+        (payload) => {
+          const row: any = payload.new;
+          if (row.status === "approved") {
+            toast.success(`تمت الموافقة! رقم العملية: ${String(row.transaction_id).slice(0, 8)}`);
+            setWaitingApproval(false); setPendingRequestId(null);
+            setOpen(false); resetState(); onSuccess();
+          } else if (row.status === "rejected") {
+            setFailureReason("رفض العميل الطلب"); toast.error("رفض العميل الطلب");
+            setWaitingApproval(false); setPendingRequestId(null);
+          } else if (row.status === "expired" || row.status === "failed") {
+            setFailureReason(row.reason || "فشل الطلب"); toast.error(row.reason || "فشل الطلب");
+            setWaitingApproval(false); setPendingRequestId(null);
+          }
+        })
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [pendingRequestId]);
 
   const handleProcess = async () => {
     setFailureReason("");
@@ -120,8 +147,11 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
         const msg = data?.error || error?.message || "فشل الدفع";
         setFailureReason(msg); toast.error(msg); return;
       }
-      toast.success(`تمت العملية بنجاح! رقم: ${(data.transaction_id as string).slice(0, 8)}`);
-      setOpen(false); resetState(); onSuccess();
+      if (data?.pending && data?.request_id) {
+        setPendingRequestId(data.request_id);
+        setWaitingApproval(true);
+        toast.info("تم إرسال الطلب للعميل - بانتظار الموافقة");
+      }
     } catch (e: any) {
       const msg = e?.message || "حدث خطأ في تنفيذ العملية";
       setFailureReason(msg); toast.error(msg);
@@ -137,6 +167,8 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
     setCustomerInfo(null);
     setStep("scan");
     setFailureReason("");
+    setPendingRequestId(null);
+    setWaitingApproval(false);
   };
 
   return (
@@ -217,10 +249,16 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
                 <p className="text-sm text-destructive font-ibm">{failureReason}</p>
               </div>
             )}
+            {waitingApproval && (
+              <div className="bg-primary/5 border border-primary/20 rounded-xl p-3 text-center">
+                <p className="text-sm font-cairo font-bold text-primary">بانتظار موافقة العميل...</p>
+                <p className="text-xs text-muted-foreground font-ibm mt-1">تظهر لدى العميل نافذة الموافقة أو الرفض</p>
+              </div>
+            )}
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => { setStep("scan"); setFailureReason(""); }} className="flex-1">رجوع</Button>
-              <Button onClick={handleProcess} disabled={loading} className="flex-1 bg-gradient-primary text-primary-foreground">
-                {loading ? "جارٍ التنفيذ..." : "تأكيد الدفع"}
+              <Button variant="outline" onClick={() => { setStep("scan"); setFailureReason(""); }} disabled={waitingApproval} className="flex-1">رجوع</Button>
+              <Button onClick={handleProcess} disabled={loading || waitingApproval} className="flex-1 bg-gradient-primary text-primary-foreground">
+                {waitingApproval ? "بانتظار العميل..." : loading ? "جارٍ الإرسال..." : "إرسال للعميل"}
               </Button>
             </div>
           </div>

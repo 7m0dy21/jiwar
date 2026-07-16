@@ -12,6 +12,7 @@ import NotificationBell from "./NotificationBell";
 import PaymentDialog from "./PaymentDialog";
 import NearbyMerchants from "./NearbyMerchants";
 import QRAuditLog from "./QRAuditLog";
+import PaymentApprovals from "./PaymentApprovals";
 
 const CustomerDashboard = () => {
   const { user, signOut } = useAuth();
@@ -59,6 +60,7 @@ const CustomerDashboard = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      <PaymentApprovals />
       <header className="border-b border-border bg-card px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <img src={jiwarLogo} alt="جوار" className="w-10 h-10" />
