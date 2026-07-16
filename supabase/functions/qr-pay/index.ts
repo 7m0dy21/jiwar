@@ -4,6 +4,7 @@ import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 const TTL_SECONDS = 60;
 
 type ParsedQrToken = {
+  version: "v2" | "v3";
   customerId: string;
   customerUserId: string | null;
   timestamp: number;
@@ -38,14 +39,36 @@ const jsonResponse = (data: unknown, status = 200) =>
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
+function normalizeQrToken(input: string): string {
+  const cleaned = input
+    .normalize("NFKC")
+    .replace(/[\u200B-\u200F\u202A-\u202E\u2066-\u2069]/g, "")
+    .replace(/[．。｡]/g, ".")
+    .trim()
+    .replace(/^["'`]+|["'`]+$/g, "");
+
+  let token = cleaned;
+  try {
+    if (/^https?:\/\//i.test(cleaned)) {
+      const url = new URL(cleaned);
+      token = url.searchParams.get("t") || url.searchParams.get("token") || decodeURIComponent(url.pathname.split("/").filter(Boolean).pop() || cleaned);
+    }
+  } catch (_) {
+    token = cleaned;
+  }
+
+  return token.replace(/\s+/g, "");
+}
+
 function parseQrToken(token: string): ParsedQrToken {
-  const cleaned = token.trim();
+  const cleaned = normalizeQrToken(token);
   const parts = cleaned.split(".");
-  if (parts[0] === "JIWARv3") {
+  if (/^JIWARv3$/i.test(parts[0])) {
     const [, compactCustomerId, compactCustomerUserId, ts36, signature] = parts;
     const timestamp = parseInt(ts36, 36);
     if (!compactCustomerId || !compactCustomerUserId || !timestamp || !signature) throw new Error("كود غير صالح");
     return {
+      version: "v3",
       customerId: compactToUuid(compactCustomerId),
       customerUserId: compactToUuid(compactCustomerUserId),
       timestamp,
@@ -54,13 +77,14 @@ function parseQrToken(token: string): ParsedQrToken {
     };
   }
 
-  if (parts[0] !== "JIWARv2") throw new Error("كود غير صالح");
+  if (!/^JIWARv2$/i.test(parts[0])) throw new Error("كود غير صالح");
 
   if (parts.length === 4) {
     const [, customerId, tsStr, signature] = parts;
     const timestamp = parseInt(tsStr, 10);
     if (!customerId || !timestamp || !signature) throw new Error("كود غير صالح");
     return {
+      version: "v2",
       customerId,
       customerUserId: null,
       timestamp,
@@ -74,6 +98,7 @@ function parseQrToken(token: string): ParsedQrToken {
     const timestamp = parseInt(tsStr, 10);
     if (!customerId || !customerUserId || !timestamp || !signature) throw new Error("كود غير صالح");
     return {
+      version: "v2",
       customerId,
       customerUserId,
       timestamp,
@@ -112,6 +137,12 @@ async function hmacSignCompact(message: string, secret: string): Promise<string>
   );
   const sig = await crypto.subtle.sign("HMAC", key, enc.encode(message));
   return base64Url(new Uint8Array(sig).slice(0, 20));
+}
+
+async function expectedSignature(parsed: ParsedQrToken, secret: string): Promise<string> {
+  return parsed.version === "v3"
+    ? hmacSignCompact(parsed.signedPayload, secret)
+    : hmacSign(parsed.signedPayload, secret);
 }
 
 async function resolveCustomer(admin: ReturnType<typeof createClient>, parsed: ParsedQrToken) {
@@ -202,7 +233,7 @@ Deno.serve(async (req) => {
         await logAudit(parsed.customerId, mer.id, "expired", null, "انتهت صلاحية الكود (lookup)");
         throw new Error("انتهت صلاحية الكود - اطلب من العميل تحديثه");
       }
-      const expectedSig = await hmacSign(parsed.signedPayload, SECRET);
+      const expectedSig = await expectedSignature(parsed, SECRET);
       if (!signaturesMatch(expectedSig, parsed.signature)) {
         await logAudit(parsed.customerId, mer.id, "invalid_signature", null, "توقيع غير صالح (lookup)");
         throw new Error("توقيع غير صالح");
@@ -274,7 +305,7 @@ Deno.serve(async (req) => {
         return jsonResponse({ error: "انتهت صلاحية الكود - اطلب من العميل تحديثه" }, 400);
       }
 
-      const expectedSig = await hmacSign(parsed.signedPayload, SECRET);
+      const expectedSig = await expectedSignature(parsed, SECRET);
       if (!signaturesMatch(expectedSig, parsed.signature)) {
         await logAudit(parsed.customerId, merchantId, "invalid_signature", numAmount, "توقيع غير صالح");
         throw new Error("توقيع غير صالح");
