@@ -94,14 +94,8 @@ Deno.test("is_super_admin → surfaces a clear DB error for a malformed uuid", a
 
 Deno.test("grants: authenticated retains EXECUTE on has_role AND is_super_admin", async () => {
   const sb = admin();
-  const { data, error } = await sb
-    .from("pg_proc")
-    .select("proname")
-    .in("proname", ["has_role", "is_super_admin"])
-    .limit(2)
-    .maybeSingle()
-    .then((r) => r) // supabase-js requires a terminal await
-    .catch((e) => ({ data: null, error: e }));
+  // (probe removed — pg_catalog isn't reachable via PostgREST; we assert
+  // by invoking the RPCs below and checking for permission-denied errors.)
 
   // We can't query pg_catalog through PostgREST directly; instead, prove the
   // grant is intact by successfully invoking both RPCs (a revoked EXECUTE would
