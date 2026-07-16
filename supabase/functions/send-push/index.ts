@@ -64,16 +64,32 @@ Deno.serve(async (req) => {
     }
 
     const admin = createClient(SUPABASE_URL, SERVICE_KEY);
-    const { user_id, title, message, type, notification_id } = await req.json();
+    const { user_id, title, message, type, notification_id, target_token } = await req.json();
     if (!user_id || !title) throw new Error("user_id and title required");
 
     const { data: pref } = await admin
       .from("notification_preferences")
-      .select("push_enabled, fcm_tokens")
+      .select("push_enabled, fcm_tokens, type_preferences")
       .eq("user_id", user_id).maybeSingle();
 
-    if (!pref || !pref.push_enabled || !pref.fcm_tokens?.length) {
-      return new Response(JSON.stringify({ skipped: true, reason: "push disabled or no tokens" }), {
+    // Per-type preference check
+    const typeKey = String(type || "info");
+    const typePref = (pref?.type_preferences as Record<string, { in_app?: boolean; push?: boolean }> | null)?.[typeKey];
+    const pushAllowedForType = typePref?.push ?? true;
+
+    // Test notifications with explicit target_token bypass preference gating
+    const isTargeted = !!target_token;
+    const tokensToSend: string[] = isTargeted
+      ? [target_token]
+      : (pref?.push_enabled && pushAllowedForType ? (pref?.fcm_tokens || []) : []);
+
+    if (!tokensToSend.length) {
+      if (notification_id) {
+        await admin.from("notifications").update({
+          delivery_status: "skipped",
+        }).eq("id", notification_id);
+      }
+      return new Response(JSON.stringify({ skipped: true, reason: "push disabled, no tokens, or type muted" }), {
         status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
