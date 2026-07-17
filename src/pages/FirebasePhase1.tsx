@@ -223,6 +223,13 @@ const FirebasePhase1 = () => {
             <Button variant="ghost" size="sm" onClick={logout}><LogOut className="w-4 h-4 ml-2" /> خروج</Button>
           </div>
 
+          <Card className="bg-primary text-primary-foreground">
+            <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-primary-foreground/90 text-sm font-normal"><Wallet className="w-4 h-4" /> رصيد المحفظة</CardTitle></CardHeader>
+            <CardContent>
+              <p className="text-4xl font-bold" dir="ltr">{merchant.walletBalance.toFixed(2)} <span className="text-lg font-normal">ر.س</span></p>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader><CardTitle>تحصيل دفعة</CardTitle></CardHeader>
             <CardContent>
