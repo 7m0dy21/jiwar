@@ -157,15 +157,25 @@ async function hmacSignCompact(message: string, secret: string): Promise<string>
 }
 
 async function expectedSignature(parsed: ParsedQrToken, secret: string): Promise<string> {
-  return parsed.version === "v3"
-    ? hmacSignCompact(parsed.signedPayload, secret)
-    : hmacSign(parsed.signedPayload, secret);
+  if (parsed.version === "v3") return hmacSignCompact(parsed.signedPayload, secret);
+  if (parsed.version === "s1") return hmacSignCompact(parsed.signedPayload, secret);
+  return hmacSign(parsed.signedPayload, secret);
 }
 
 async function resolveCustomer(admin: ReturnType<typeof createClient>, parsed: ParsedQrToken) {
+  if (parsed.version === "s1" && parsed.accountNumber) {
+    const { data: byAcct, error: acctErr } = await admin
+      .from("customers")
+      .select("id, available_balance, credit_limit, user_id, onboarding_completed, account_number")
+      .eq("account_number", parsed.accountNumber)
+      .maybeSingle();
+    if (acctErr) return { customer: null, error: acctErr.message, relinked: false };
+    return { customer: byAcct, error: null, relinked: false };
+  }
+
   const { data: byId, error: byIdError } = await admin
     .from("customers")
-    .select("id, available_balance, credit_limit, user_id, onboarding_completed")
+    .select("id, available_balance, credit_limit, user_id, onboarding_completed, account_number")
     .eq("id", parsed.customerId)
     .maybeSingle();
 
@@ -176,7 +186,7 @@ async function resolveCustomer(admin: ReturnType<typeof createClient>, parsed: P
 
   const { data: byUser, error: byUserError } = await admin
     .from("customers")
-    .select("id, available_balance, credit_limit, user_id, onboarding_completed")
+    .select("id, available_balance, credit_limit, user_id, onboarding_completed, account_number")
     .eq("user_id", parsed.customerUserId)
     .maybeSingle();
 
