@@ -116,6 +116,17 @@ const CustomerDashboard = () => {
           </div>
         )}
 
+        {customer && user && (
+          <div className="mb-8">
+            <AccountInfoCard
+              accountNumber={customer.account_number}
+              linkedAt={customer.created_at}
+              customerId={customer.id}
+              userId={user.id}
+            />
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-card border border-border rounded-2xl p-6 shadow-card space-y-2">
             <DynamicQR customerName={profile?.full_name || "عميل"} />
