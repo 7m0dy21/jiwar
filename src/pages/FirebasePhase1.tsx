@@ -17,7 +17,7 @@ import {
   type UserRole,
 } from "@/lib/firebaseAuth";
 
-import { getCustomerByUid, type CustomerAccount } from "@/lib/firebaseCustomers";
+import { getCustomerByUid, setCustomerVerified, type CustomerAccount } from "@/lib/firebaseCustomers";
 import { getMerchantByUid, type MerchantAccount } from "@/lib/firebaseMerchants";
 import {
   createMerchantTransaction,
@@ -79,6 +79,7 @@ const FirebasePhase1 = () => {
           phone: d.phone ?? null,
           email: d.email ?? "",
           walletBalance: typeof d.wallet_balance === "number" ? d.wallet_balance : 0,
+          isVerified: d.is_verified === true,
           createdAt: d.created_at?.toMillis?.() ?? null,
         });
         setMerchant(null);
@@ -182,7 +183,7 @@ const FirebasePhase1 = () => {
     const completed = txs.filter((t) => t.status === "completed");
     return (
       <div className="min-h-screen bg-background p-6">
-        <CustomerApprovalModal customerUid={uid} walletBalance={customer.walletBalance} />
+        <CustomerApprovalModal customerUid={uid} walletBalance={customer.walletBalance} isVerified={customer.isVerified} />
         <div className="max-w-md mx-auto space-y-6">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold">حسابي في جوار</h1>
@@ -193,6 +194,37 @@ const FirebasePhase1 = () => {
             <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-primary-foreground/90 text-sm font-normal"><Wallet className="w-4 h-4" /> رصيد المحفظة</CardTitle></CardHeader>
             <CardContent>
               <p className="text-4xl font-bold" dir="ltr">{customer.walletBalance.toFixed(2)} <span className="text-lg font-normal">ر.س</span></p>
+            </CardContent>
+          </Card>
+
+          <Card className={customer.isVerified ? "border-primary/40" : "border-destructive/40"}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-normal flex items-center justify-between">
+                <span>حالة التحقق (نفاذ)</span>
+                <span className={customer.isVerified ? "text-primary font-bold" : "text-destructive font-bold"}>
+                  {customer.isVerified ? "موثّق ✓" : "غير موثّق"}
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                {customer.isVerified
+                  ? "حسابك موثّق ويمكنك استقبال طلبات الدفع."
+                  : "لن تستطيع الموافقة على أي عملية دفع حتى يتم توثيق الحساب."}
+              </p>
+              <Button
+                size="sm"
+                variant={customer.isVerified ? "outline" : "default"}
+                className="w-full"
+                onClick={async () => {
+                  try {
+                    await setCustomerVerified(uid, !customer.isVerified);
+                    toast.success(customer.isVerified ? "تم إلغاء التوثيق" : "تم توثيق الحساب");
+                  } catch (e: any) { toast.error(e?.message || "فشل التحديث"); }
+                }}
+              >
+                {customer.isVerified ? "إلغاء التوثيق (Admin)" : "توثيق الحساب (Admin/Nafath)"}
+              </Button>
             </CardContent>
           </Card>
 

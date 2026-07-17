@@ -14,9 +14,10 @@ import {
 interface Props {
   customerUid: string;
   walletBalance: number;
+  isVerified: boolean;
 }
 
-const CustomerApprovalModal = ({ customerUid, walletBalance }: Props) => {
+const CustomerApprovalModal = ({ customerUid, walletBalance, isVerified }: Props) => {
   const [pending, setPending] = useState<TransactionRecord[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -29,6 +30,10 @@ const CustomerApprovalModal = ({ customerUid, walletBalance }: Props) => {
 
   const approve = async () => {
     if (!current) return;
+    if (!isVerified) {
+      toast.error("تم التعرف على العميل، لكنه لم يكمل التحقق بعد");
+      return;
+    }
     if (walletBalance < current.amount) {
       toast.error("الرصيد غير كافٍ لإتمام العملية");
       return;
@@ -80,14 +85,19 @@ const CustomerApprovalModal = ({ customerUid, walletBalance }: Props) => {
             <span className="text-muted-foreground">رصيدك الحالي: </span>
             <span className="font-semibold" dir="ltr">{walletBalance.toFixed(2)} ر.س</span>
           </div>
-          {insufficient && (
+          {!isVerified && (
+            <p className="text-sm text-destructive font-semibold">
+              تم التعرف على العميل، لكنه لم يكمل التحقق بعد
+            </p>
+          )}
+          {isVerified && insufficient && (
             <p className="text-sm text-destructive font-semibold">الرصيد غير كافٍ لإتمام العملية</p>
           )}
           <div className="grid grid-cols-2 gap-3">
             <Button onClick={decline} disabled={loading} variant="outline" className="gap-2 border-destructive/40 text-destructive">
               <X className="w-4 h-4" /> رفض
             </Button>
-            <Button onClick={approve} disabled={loading || insufficient} className="gap-2">
+            <Button onClick={approve} disabled={loading || insufficient || !isVerified} className="gap-2">
               <Check className="w-4 h-4" /> موافقة
             </Button>
           </div>
