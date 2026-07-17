@@ -15,6 +15,7 @@ export interface CustomerAccount {
   fullName: string;
   phone: string | null;
   email: string;
+  walletBalance: number;
   createdAt: number | null;
 }
 
