@@ -36,6 +36,7 @@ const toAccount = (uid: string, d: any, fallbackAccountNumber?: string): Custome
   phone: d.phone ?? null,
   email: d.email ?? "",
   walletBalance: typeof d.wallet_balance === "number" ? d.wallet_balance : 0,
+  isVerified: d.is_verified === true,
   createdAt: d.created_at?.toMillis?.() ?? null,
 });
 
