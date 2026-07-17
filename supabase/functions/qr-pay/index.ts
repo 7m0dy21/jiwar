@@ -243,6 +243,21 @@ Deno.serve(async (req) => {
       return jsonResponse({ token, ttl: TTL_SECONDS, expires_at: ts + TTL_SECONDS });
     }
 
+    if (action === "generate_static") {
+      const { data: customer } = await admin
+        .from("customers")
+        .select("id, user_id, account_number")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (!customer) return jsonResponse({ error: "ليس لديك حساب عميل" }, 400);
+      if (!customer.account_number) return jsonResponse({ error: "رقم الحساب غير متوفر" }, 400);
+      const payload = `s1.${customer.account_number}`;
+      const sig = await hmacSignCompact(payload, SECRET);
+      const token = `JIWARs1.${customer.account_number}.${sig}`;
+      await logAudit(customer.id, null, "generated_static", null, "تم توليد الكود الثابت", { account_number: customer.account_number });
+      return jsonResponse({ token, account_number: customer.account_number });
+    }
+
     if (action === "lookup") {
       const { token } = body;
       if (!token || typeof token !== "string") throw new Error("token مطلوب");
