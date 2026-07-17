@@ -4,12 +4,22 @@ service cloud.firestore {
 
     function isSignedIn() { return request.auth != null; }
     function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
-    function hasRole(r)  { return isSignedIn() && request.auth.token.role == r; }
-    function isAdmin()    { return hasRole('admin'); }
 
-    // A merchant is a signed-in user whose auth token carries role:'merchant'
-    // (set by the onMerchantCreated Cloud Function).
-    function isMerchant() { return hasRole('merchant'); }
+    // Spark-plan compatible: role is determined by the existence of a
+    // merchants/{uid} or customers/{uid} profile document. No Custom Claims,
+    // no Cloud Functions required.
+    function isMerchant() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/merchants/$(request.auth.uid));
+    }
+    function isCustomer() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/customers/$(request.auth.uid));
+    }
+    function isAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
 
     function merchantIdOf(uid) {
       return get(/databases/$(database)/documents/merchants/$(uid)).data.merchant_id;
@@ -23,31 +33,36 @@ service cloud.firestore {
 
       allow create: if isOwner(uid)
         && request.resource.data.uid == uid
+        && request.resource.data.role == 'customer'
         && request.resource.data.account_number is string
         && request.resource.data.account_number.size() >= 10;
 
-      // Customer may edit profile fields, never account_number.
+      // Customer may edit profile fields, never account_number, uid or role.
       allow update: if isOwner(uid)
         && request.resource.data.account_number == resource.data.account_number
-        && request.resource.data.uid == resource.data.uid;
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.role == resource.data.role;
 
       allow delete: if isAdmin();
     }
 
     // ---------- merchants/{uid} ----------
     // Store profile. Owner or admin full read; other authenticated users may
-    // read to confirm a merchant exists (needed for scanning receipts).
+    // read to confirm a merchant exists (needed for scanning receipts and for
+    // the transaction-create rule to look up merchant_id).
     match /merchants/{uid} {
       allow read: if isSignedIn();
 
       allow create: if isOwner(uid)
         && request.resource.data.uid == uid
+        && request.resource.data.role == 'merchant'
         && request.resource.data.merchant_id is string
         && request.resource.data.merchant_id.size() >= 4;
 
       allow update: if isOwner(uid)
         && request.resource.data.merchant_id == resource.data.merchant_id
-        && request.resource.data.uid == resource.data.uid;
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.role == resource.data.role;
 
       allow delete: if isAdmin();
     }
@@ -75,10 +90,9 @@ service cloud.firestore {
     }
 
     // ---------- transactions/{id} ----------
-    // Linked payment records. Created by merchants; each record explicitly
-    // ties account_number ↔ merchant_id ↔ amount ↔ timestamp.
     // Merchants MAY create transactions, but ONLY for their own merchant_id.
-    // Merchants cannot read customers/{uid} — the transaction record carries
+    // Role is determined by the presence of a merchants/{uid} profile doc.
+    // Merchants cannot read customers/{uid}; the transaction record carries
     // only the account_number and customer_uid needed for the transaction.
     match /transactions/{txId} {
       allow create: if isMerchant()
@@ -91,7 +105,6 @@ service cloud.firestore {
         && request.resource.data.amount > 0
         && request.resource.data.status == 'pending';
 
-      // Read: merchant sees their own; customer sees transactions routed to them.
       allow read: if isAdmin()
         || (isSignedIn() && resource.data.merchant_uid == request.auth.uid)
         || (isSignedIn() && resource.data.customer_uid == request.auth.uid);
@@ -103,7 +116,6 @@ service cloud.firestore {
           && resource.data.customer_uid == request.auth.uid
           && resource.data.status == 'pending'
           && request.resource.data.status in ['completed','declined']
-          // Immutable core fields
           && request.resource.data.account_number == resource.data.account_number
           && request.resource.data.customer_uid == resource.data.customer_uid
           && request.resource.data.merchant_uid == resource.data.merchant_uid

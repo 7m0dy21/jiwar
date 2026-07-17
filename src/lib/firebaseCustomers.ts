@@ -69,12 +69,14 @@ export const ensureCustomerAccount = async (
     tx.set(reservationRef, { uid, createdAt: serverTimestamp() });
     tx.set(customerRef, {
       uid,
+      role: "customer",
       account_number: candidate,
       full_name: input.fullName,
       phone: input.phone,
       email: input.email,
       created_at: serverTimestamp(),
     });
+
     return candidate;
   });
 

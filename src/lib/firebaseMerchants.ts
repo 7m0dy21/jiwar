@@ -53,12 +53,14 @@ export const ensureMerchantAccount = async (
     tx.set(reservationRef, { uid, createdAt: serverTimestamp() });
     tx.set(merchantRef, {
       uid,
+      role: "merchant",
       merchant_id: candidate,
       store_name: input.storeName,
       phone: input.phone,
       email: input.email,
       created_at: serverTimestamp(),
     });
+
     return candidate;
   });
 
