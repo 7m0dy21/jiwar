@@ -130,8 +130,10 @@ const FirebasePhase1 = () => {
 
   // -------- Authed views --------
   if (uid && customer) {
+    const completed = txs.filter((t) => t.status === "completed");
     return (
       <div className="min-h-screen bg-background p-6">
+        <CustomerApprovalModal customerUid={uid} />
         <div className="max-w-md mx-auto space-y-6">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold">حسابي في جوار</h1>
@@ -159,17 +161,19 @@ const FirebasePhase1 = () => {
           </Card>
 
           <Card>
-            <CardHeader><CardTitle>عملياتي</CardTitle></CardHeader>
+            <CardHeader><CardTitle>عملياتي المكتملة</CardTitle></CardHeader>
             <CardContent>
-              {txs.length === 0 && <p className="text-sm text-muted-foreground text-center">لا توجد عمليات</p>}
+              {completed.length === 0 && <p className="text-sm text-muted-foreground text-center">لا توجد عمليات مكتملة</p>}
               <ul className="space-y-2">
-                {txs.map((t) => (
+                {completed.map((t) => (
                   <li key={t.id} className="flex justify-between border-b pb-2 text-sm">
                     <div>
                       <p className="font-semibold">{t.amount} ر.س</p>
-                      <p className="text-xs text-muted-foreground">تاجر: {t.merchant_id}</p>
+                      <p className="text-xs text-muted-foreground" dir="ltr">تاجر: {t.merchant_id}</p>
                     </div>
-                    <span className="text-xs">{t.status}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {t.created_at ? new Date(t.created_at).toLocaleString("ar-SA") : ""}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -179,6 +183,7 @@ const FirebasePhase1 = () => {
       </div>
     );
   }
+
 
   if (uid && merchant) {
     return (
