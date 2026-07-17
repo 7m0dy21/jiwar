@@ -172,6 +172,10 @@ const FirebasePhase1 = () => {
     );
   }
   if (!ready) return <div className="min-h-screen flex items-center justify-center">...</div>;
+  if (uid && profileLoading && !customer && !merchant) {
+    return <div className="min-h-screen flex items-center justify-center text-muted-foreground">جارٍ تحميل بيانات الحساب...</div>;
+  }
+
 
   // -------- Authed views --------
   if (uid && customer) {
