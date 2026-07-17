@@ -30,6 +30,10 @@ const CustomerApprovalModal = ({ customerUid, walletBalance, isVerified }: Props
 
   const approve = async () => {
     if (!current) return;
+    if (!isVerified) {
+      toast.error("تم التعرف على العميل، لكنه لم يكمل التحقق بعد");
+      return;
+    }
     if (walletBalance < current.amount) {
       toast.error("الرصيد غير كافٍ لإتمام العملية");
       return;
