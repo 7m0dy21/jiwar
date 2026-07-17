@@ -14,9 +14,10 @@ import {
 interface Props {
   customerUid: string;
   walletBalance: number;
+  isVerified: boolean;
 }
 
-const CustomerApprovalModal = ({ customerUid, walletBalance }: Props) => {
+const CustomerApprovalModal = ({ customerUid, walletBalance, isVerified }: Props) => {
   const [pending, setPending] = useState<TransactionRecord[]>([]);
   const [loading, setLoading] = useState(false);
 
