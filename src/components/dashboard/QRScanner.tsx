@@ -44,11 +44,17 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
       }
     } catch {}
     s = decodeURIComponent(s).replace(/\s+/g, "");
+    const s1 = s.match(/JIWARs1\.\d{6,20}\.[A-Za-z0-9_-]{20,64}/i);
+    if (s1) return s1[0].replace(/^jiwars1/i, "JIWARs1");
     const v3 = s.match(/JIWARv3\.[0-9a-f]{32}\.[0-9a-f]{32}\.[0-9a-z]+\.[A-Za-z0-9_-]{20,64}/i);
     if (v3) return v3[0].replace(/^jiwarv3/i, "JIWARv3");
 
     const v2 = s.match(/JIWARv2\.[A-Fa-f0-9-]{36}(?:\.[A-Fa-f0-9-]{36})?\.\d+\.[A-Fa-f0-9]{64}/i);
-    return v2 ? v2[0].replace(/^jiwarv2/i, "JIWARv2") : null;
+    if (v2) return v2[0].replace(/^jiwarv2/i, "JIWARv2");
+
+    // Bare account number (10 digits typical)
+    const acct = s.match(/^\d{6,20}$/);
+    return acct ? acct[0] : null;
   };
 
   // Strict client-side pre-validation of a JIWARv3 token structure.
