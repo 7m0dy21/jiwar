@@ -5,9 +5,6 @@ service cloud.firestore {
     function isSignedIn() { return request.auth != null; }
     function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
 
-    // Spark-plan compatible: role is determined by the existence of a
-    // merchants/{uid} or customers/{uid} profile document. No Custom Claims,
-    // no Cloud Functions required.
     function isMerchant() {
       return isSignedIn()
         && exists(/databases/$(database)/documents/merchants/$(request.auth.uid));
@@ -25,9 +22,15 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/merchants/$(uid)).data.merchant_id;
     }
 
+    // ---------- admins/{uid} ----------
+    // Admin registry. Bootstrap the first admin manually from Firebase Console.
+    // After that, existing admins can promote/demote other users from the UI.
+    match /admins/{uid} {
+      allow read: if isAdmin();
+      allow create, update, delete: if isAdmin();
+    }
+
     // ---------- customers/{uid} ----------
-    // Personal profile. Only the customer (or admin) can read.
-    // Merchants have NO read access to customer profile data.
     match /customers/{uid} {
       allow read: if isOwner(uid) || isAdmin();
 
@@ -39,14 +42,16 @@ service cloud.firestore {
         && request.resource.data.wallet_balance is number
         && request.resource.data.wallet_balance >= 0;
 
-      // Owner may edit profile fields and wallet_balance (used when approving
-      // a payment). account_number, uid and role are immutable.
+      // Owner may edit profile fields and wallet_balance.
       allow update: if isOwner(uid)
         && request.resource.data.account_number == resource.data.account_number
         && request.resource.data.uid == resource.data.uid
         && request.resource.data.role == resource.data.role
         && request.resource.data.wallet_balance is number
         && request.resource.data.wallet_balance >= 0;
+
+      // Admin may update any field (e.g., toggle is_verified).
+      allow update: if isAdmin();
 
       allow delete: if isAdmin();
     }
@@ -63,7 +68,6 @@ service cloud.firestore {
         && request.resource.data.wallet_balance is number
         && request.resource.data.wallet_balance >= 0;
 
-      // Owner may edit their profile (immutable id/uid/role).
       allow update: if isOwner(uid)
         && request.resource.data.merchant_id == resource.data.merchant_id
         && request.resource.data.uid == resource.data.uid
@@ -71,21 +75,18 @@ service cloud.firestore {
         && request.resource.data.wallet_balance is number
         && request.resource.data.wallet_balance >= 0;
 
-      // Any signed-in user (a paying customer) may CREDIT a merchant's wallet
-      // during payment approval — changing ONLY wallet_balance, and only by
-      // strictly increasing it. All other fields must be untouched.
+      // Any signed-in user (paying customer) may credit merchant wallet by
+      // strictly increasing wallet_balance during payment approval.
       allow update: if isSignedIn()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['wallet_balance'])
         && request.resource.data.wallet_balance is number
         && request.resource.data.wallet_balance > resource.data.get('wallet_balance', 0);
 
+      allow update: if isAdmin();
       allow delete: if isAdmin();
     }
 
     // ---------- account_numbers/{n} ----------
-    // Reservation index enforcing uniqueness. Payload = {uid, createdAt} only.
-    // Any signed-in user (including merchants) may read to resolve
-    // account_number → uid for routing a transaction. No PII exposed.
     match /account_numbers/{num} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
@@ -105,10 +106,6 @@ service cloud.firestore {
     }
 
     // ---------- transactions/{id} ----------
-    // Merchants MAY create transactions, but ONLY for their own merchant_id.
-    // Role is determined by the presence of a merchants/{uid} profile doc.
-    // Merchants cannot read customers/{uid}; the transaction record carries
-    // only the account_number and customer_uid needed for the transaction.
     match /transactions/{txId} {
       allow create: if isMerchant()
         && request.resource.data.merchant_uid == request.auth.uid
@@ -124,7 +121,6 @@ service cloud.firestore {
         || (isSignedIn() && resource.data.merchant_uid == request.auth.uid)
         || (isSignedIn() && resource.data.customer_uid == request.auth.uid);
 
-      // Only the target customer can approve/decline their own pending tx.
       allow update: if isAdmin()
         || (
           isSignedIn()
@@ -141,7 +137,6 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Default deny.
     match /{document=**} {
       allow read, write: if false;
     }
