@@ -34,6 +34,7 @@ type Mode = "signin" | "signup";
 const FirebasePhase1 = () => {
   const [ready, setReady] = useState(false);
   const [uid, setUid] = useState<string | null>(null);
+  const [profileLoading, setProfileLoading] = useState(false);
   const [customer, setCustomer] = useState<CustomerAccount | null>(null);
   const [merchant, setMerchant] = useState<MerchantAccount | null>(null);
   const [txs, setTxs] = useState<TransactionRecord[]>([]);
@@ -53,19 +54,65 @@ const FirebasePhase1 = () => {
 
   useEffect(() => {
     if (!isFirebaseConfigured()) { setReady(true); return; }
-    const unsub = subscribeAuth(async (user) => {
+    const unsub = subscribeAuth((user) => {
       setUid(user?.uid ?? null);
-      if (user) {
-        const [c, m] = await Promise.all([
-          getCustomerByUid(user.uid).catch(() => null),
-          getMerchantByUid(user.uid).catch(() => null),
-        ]);
-        setCustomer(c); setMerchant(m);
-      } else { setCustomer(null); setMerchant(null); setTxs([]); }
+      if (!user) { setCustomer(null); setMerchant(null); setTxs([]); setProfileLoading(false); }
+      else { setProfileLoading(true); }
       setReady(true);
     });
     return () => unsub();
   }, []);
+
+  // Real-time profile subscription: try customers/{uid} first, fall back to merchants/{uid}.
+  useEffect(() => {
+    if (!uid) return;
+    let resolvedRole: "customer" | "merchant" | null = null;
+
+    const unsubCustomer = onSnapshot(doc(getDb(), "customers", uid), (snap) => {
+      if (snap.exists()) {
+        resolvedRole = "customer";
+        const d = snap.data() as any;
+        setCustomer({
+          uid,
+          accountNumber: d.account_number ?? "",
+          fullName: d.full_name ?? "",
+          phone: d.phone ?? null,
+          email: d.email ?? "",
+          walletBalance: typeof d.wallet_balance === "number" ? d.wallet_balance : 0,
+          createdAt: d.created_at?.toMillis?.() ?? null,
+        });
+        setMerchant(null);
+        setProfileLoading(false);
+      } else if (resolvedRole !== "merchant") {
+        setCustomer(null);
+      }
+    }, (err) => { console.error("customer snapshot", err); setProfileLoading(false); });
+
+    const unsubMerchant = onSnapshot(doc(getDb(), "merchants", uid), (snap) => {
+      if (snap.exists()) {
+        resolvedRole = "merchant";
+        const d = snap.data() as any;
+        setMerchant({
+          uid,
+          merchantId: d.merchant_id ?? "",
+          storeName: d.store_name ?? "",
+          phone: d.phone ?? null,
+          email: d.email ?? "",
+          walletBalance: typeof d.wallet_balance === "number" ? d.wallet_balance : 0,
+          createdAt: d.created_at?.toMillis?.() ?? null,
+        });
+        setCustomer(null);
+        setProfileLoading(false);
+      } else if (resolvedRole !== "customer") {
+        setMerchant(null);
+      }
+    }, (err) => { console.error("merchant snapshot", err); setProfileLoading(false); });
+
+    // If neither doc exists after a tick, stop the loading spinner so auth forms can render.
+    const t = setTimeout(() => setProfileLoading(false), 1500);
+
+    return () => { unsubCustomer(); unsubMerchant(); clearTimeout(t); };
+  }, [uid]);
 
   useEffect(() => {
     if (!uid) return;
@@ -73,24 +120,6 @@ const FirebasePhase1 = () => {
     if (customer) return subscribeCustomerTransactions(uid, setTxs);
   }, [uid, customer, merchant]);
 
-  // Live balance updates for the signed-in profile.
-  useEffect(() => {
-    if (!uid) return;
-    if (customer) {
-      return onSnapshot(doc(getDb(), "customers", uid), (snap) => {
-        if (!snap.exists()) return;
-        const d = snap.data() as any;
-        setCustomer((prev) => (prev ? { ...prev, walletBalance: typeof d.wallet_balance === "number" ? d.wallet_balance : prev.walletBalance } : prev));
-      });
-    }
-    if (merchant) {
-      return onSnapshot(doc(getDb(), "merchants", uid), (snap) => {
-        if (!snap.exists()) return;
-        const d = snap.data() as any;
-        setMerchant((prev) => (prev ? { ...prev, walletBalance: typeof d.wallet_balance === "number" ? d.wallet_balance : prev.walletBalance } : prev));
-      });
-    }
-  }, [uid, customer?.uid, merchant?.uid]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true);
@@ -143,6 +172,10 @@ const FirebasePhase1 = () => {
     );
   }
   if (!ready) return <div className="min-h-screen flex items-center justify-center">...</div>;
+  if (uid && profileLoading && !customer && !merchant) {
+    return <div className="min-h-screen flex items-center justify-center text-muted-foreground">جارٍ تحميل بيانات الحساب...</div>;
+  }
+
 
   // -------- Authed views --------
   if (uid && customer) {
@@ -166,9 +199,12 @@ const FirebasePhase1 = () => {
           <Card>
             <CardHeader><CardTitle>رقم الحساب الثابت</CardTitle></CardHeader>
             <CardContent className="space-y-4 text-center">
-              <div className="bg-white p-4 rounded-2xl inline-block">
-                <QRCodeSVG value={customer.accountNumber} size={240} level="M" marginSize={2} />
+              <div className="bg-white p-4 rounded-2xl inline-block min-h-[272px] min-w-[272px] flex items-center justify-center">
+                {customer.accountNumber
+                  ? <QRCodeSVG value={customer.accountNumber} size={240} level="M" marginSize={2} />
+                  : <span className="text-muted-foreground text-sm">جارٍ تحميل رقم الحساب...</span>}
               </div>
+
               <div>
                 <p className="text-xs text-muted-foreground mb-1">رقم حسابك (فريد ودائم)</p>
                 <div className="flex items-center justify-center gap-2">
