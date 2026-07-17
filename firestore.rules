@@ -35,21 +35,23 @@ service cloud.firestore {
         && request.resource.data.uid == uid
         && request.resource.data.role == 'customer'
         && request.resource.data.account_number is string
-        && request.resource.data.account_number.size() >= 10;
+        && request.resource.data.account_number.size() >= 10
+        && request.resource.data.wallet_balance is number
+        && request.resource.data.wallet_balance >= 0;
 
-      // Customer may edit profile fields, never account_number, uid or role.
+      // Owner may edit profile fields and wallet_balance (used when approving
+      // a payment). account_number, uid and role are immutable.
       allow update: if isOwner(uid)
         && request.resource.data.account_number == resource.data.account_number
         && request.resource.data.uid == resource.data.uid
-        && request.resource.data.role == resource.data.role;
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.wallet_balance is number
+        && request.resource.data.wallet_balance >= 0;
 
       allow delete: if isAdmin();
     }
 
     // ---------- merchants/{uid} ----------
-    // Store profile. Owner or admin full read; other authenticated users may
-    // read to confirm a merchant exists (needed for scanning receipts and for
-    // the transaction-create rule to look up merchant_id).
     match /merchants/{uid} {
       allow read: if isSignedIn();
 
@@ -57,12 +59,25 @@ service cloud.firestore {
         && request.resource.data.uid == uid
         && request.resource.data.role == 'merchant'
         && request.resource.data.merchant_id is string
-        && request.resource.data.merchant_id.size() >= 4;
+        && request.resource.data.merchant_id.size() >= 4
+        && request.resource.data.wallet_balance is number
+        && request.resource.data.wallet_balance >= 0;
 
+      // Owner may edit their profile (immutable id/uid/role).
       allow update: if isOwner(uid)
         && request.resource.data.merchant_id == resource.data.merchant_id
         && request.resource.data.uid == resource.data.uid
-        && request.resource.data.role == resource.data.role;
+        && request.resource.data.role == resource.data.role
+        && request.resource.data.wallet_balance is number
+        && request.resource.data.wallet_balance >= 0;
+
+      // Any signed-in user (a paying customer) may CREDIT a merchant's wallet
+      // during payment approval — changing ONLY wallet_balance, and only by
+      // strictly increasing it. All other fields must be untouched.
+      allow update: if isSignedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['wallet_balance'])
+        && request.resource.data.wallet_balance is number
+        && request.resource.data.wallet_balance > resource.data.get('wallet_balance', 0);
 
       allow delete: if isAdmin();
     }

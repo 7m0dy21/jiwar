@@ -3,8 +3,11 @@ import {
   getDoc,
   runTransaction,
   serverTimestamp,
+  updateDoc,
 } from "firebase/firestore";
 import { getDb } from "@/config/firebase";
+
+export const STARTING_WALLET_BALANCE = 1000;
 
 export interface CustomerAccount {
   uid: string;
@@ -12,6 +15,7 @@ export interface CustomerAccount {
   fullName: string;
   phone: string | null;
   email: string;
+  walletBalance: number;
   createdAt: number | null;
 }
 
@@ -23,12 +27,23 @@ export interface CreateCustomerInput {
 
 const COUNTER_START = 1_000_000_000; // first account_number = 1000000000 (10 digits)
 
+const toAccount = (uid: string, d: any, fallbackAccountNumber?: string): CustomerAccount => ({
+  uid,
+  accountNumber: d.account_number ?? fallbackAccountNumber ?? "",
+  fullName: d.full_name ?? "",
+  phone: d.phone ?? null,
+  email: d.email ?? "",
+  walletBalance: typeof d.wallet_balance === "number" ? d.wallet_balance : 0,
+  createdAt: d.created_at?.toMillis?.() ?? null,
+});
+
 /**
  * Atomically:
  *  - reads/creates meta/counters.nextAccountNumber
  *  - reserves account_numbers/{n} (guarantees global uniqueness — no two customers can share)
- *  - writes customers/{uid} with account_number
- * If customers/{uid} already exists, returns the existing account.
+ *  - writes customers/{uid} with account_number and starting wallet_balance
+ * If customers/{uid} already exists, returns the existing account (and backfills
+ * wallet_balance for legacy docs).
  */
 export const ensureCustomerAccount = async (
   uid: string,
@@ -41,14 +56,11 @@ export const ensureCustomerAccount = async (
   const existing = await getDoc(customerRef);
   if (existing.exists()) {
     const d = existing.data() as any;
-    return {
-      uid,
-      accountNumber: d.account_number,
-      fullName: d.full_name ?? "",
-      phone: d.phone ?? null,
-      email: d.email ?? "",
-      createdAt: d.created_at?.toMillis?.() ?? null,
-    };
+    if (typeof d.wallet_balance !== "number") {
+      await updateDoc(customerRef, { wallet_balance: STARTING_WALLET_BALANCE });
+      d.wallet_balance = STARTING_WALLET_BALANCE;
+    }
+    return toAccount(uid, d);
   }
 
   const accountNumber = await runTransaction(db, async (tx) => {
@@ -61,7 +73,6 @@ export const ensureCustomerAccount = async (
     const reservationRef = doc(db, "account_numbers", candidate);
     const reservation = await tx.get(reservationRef);
     if (reservation.exists()) {
-      // Extremely unlikely but bail so caller retries
       throw new Error("account_number_collision");
     }
 
@@ -74,6 +85,7 @@ export const ensureCustomerAccount = async (
       full_name: input.fullName,
       phone: input.phone,
       email: input.email,
+      wallet_balance: STARTING_WALLET_BALANCE,
       created_at: serverTimestamp(),
     });
 
@@ -86,6 +98,7 @@ export const ensureCustomerAccount = async (
     fullName: input.fullName,
     phone: input.phone,
     email: input.email,
+    walletBalance: STARTING_WALLET_BALANCE,
     createdAt: Date.now(),
   };
 };
@@ -96,14 +109,16 @@ export const getCustomerByUid = async (
   const snap = await getDoc(doc(getDb(), "customers", uid));
   if (!snap.exists()) return null;
   const d = snap.data() as any;
-  return {
-    uid,
-    accountNumber: d.account_number,
-    fullName: d.full_name ?? "",
-    phone: d.phone ?? null,
-    email: d.email ?? "",
-    createdAt: d.created_at?.toMillis?.() ?? null,
-  };
+  // Backfill legacy docs missing wallet_balance so rules comparisons work.
+  if (typeof d.wallet_balance !== "number") {
+    try {
+      await updateDoc(doc(getDb(), "customers", uid), { wallet_balance: STARTING_WALLET_BALANCE });
+      d.wallet_balance = STARTING_WALLET_BALANCE;
+    } catch {
+      /* ignore */
+    }
+  }
+  return toAccount(uid, d);
 };
 
 /** Merchant-safe lookup: returns only the customer's UID for the given account_number. */

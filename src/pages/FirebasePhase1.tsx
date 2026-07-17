@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
+import { doc, onSnapshot } from "firebase/firestore";
+import { getDb } from "@/config/firebase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Copy, LogOut, Store, User as UserIcon } from "lucide-react";
+import { Copy, LogOut, Store, User as UserIcon, Wallet } from "lucide-react";
 import {
   signUpCustomer,
   signUpMerchant,
@@ -71,6 +73,25 @@ const FirebasePhase1 = () => {
     if (customer) return subscribeCustomerTransactions(uid, setTxs);
   }, [uid, customer, merchant]);
 
+  // Live balance updates for the signed-in profile.
+  useEffect(() => {
+    if (!uid) return;
+    if (customer) {
+      return onSnapshot(doc(getDb(), "customers", uid), (snap) => {
+        if (!snap.exists()) return;
+        const d = snap.data() as any;
+        setCustomer((prev) => (prev ? { ...prev, walletBalance: typeof d.wallet_balance === "number" ? d.wallet_balance : prev.walletBalance } : prev));
+      });
+    }
+    if (merchant) {
+      return onSnapshot(doc(getDb(), "merchants", uid), (snap) => {
+        if (!snap.exists()) return;
+        const d = snap.data() as any;
+        setMerchant((prev) => (prev ? { ...prev, walletBalance: typeof d.wallet_balance === "number" ? d.wallet_balance : prev.walletBalance } : prev));
+      });
+    }
+  }, [uid, customer?.uid, merchant?.uid]);
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true);
     try {
@@ -128,12 +149,20 @@ const FirebasePhase1 = () => {
     const completed = txs.filter((t) => t.status === "completed");
     return (
       <div className="min-h-screen bg-background p-6">
-        <CustomerApprovalModal customerUid={uid} />
+        <CustomerApprovalModal customerUid={uid} walletBalance={customer.walletBalance} />
         <div className="max-w-md mx-auto space-y-6">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold">حسابي في جوار</h1>
             <Button variant="ghost" size="sm" onClick={logout}><LogOut className="w-4 h-4 ml-2" /> خروج</Button>
           </div>
+
+          <Card className="bg-primary text-primary-foreground">
+            <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-primary-foreground/90 text-sm font-normal"><Wallet className="w-4 h-4" /> رصيد المحفظة</CardTitle></CardHeader>
+            <CardContent>
+              <p className="text-4xl font-bold" dir="ltr">{customer.walletBalance.toFixed(2)} <span className="text-lg font-normal">ر.س</span></p>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader><CardTitle>رقم الحساب الثابت</CardTitle></CardHeader>
             <CardContent className="space-y-4 text-center">
@@ -193,6 +222,13 @@ const FirebasePhase1 = () => {
             </div>
             <Button variant="ghost" size="sm" onClick={logout}><LogOut className="w-4 h-4 ml-2" /> خروج</Button>
           </div>
+
+          <Card className="bg-primary text-primary-foreground">
+            <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-primary-foreground/90 text-sm font-normal"><Wallet className="w-4 h-4" /> رصيد المحفظة</CardTitle></CardHeader>
+            <CardContent>
+              <p className="text-4xl font-bold" dir="ltr">{merchant.walletBalance.toFixed(2)} <span className="text-lg font-normal">ر.س</span></p>
+            </CardContent>
+          </Card>
 
           <Card>
             <CardHeader><CardTitle>تحصيل دفعة</CardTitle></CardHeader>
