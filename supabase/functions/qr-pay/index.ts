@@ -4,9 +4,10 @@ import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 const TTL_SECONDS = 60;
 
 type ParsedQrToken = {
-  version: "v2" | "v3";
+  version: "v2" | "v3" | "s1";
   customerId: string;
   customerUserId: string | null;
+  accountNumber: string | null;
   timestamp: number;
   signature: string;
   signedPayload: string;
