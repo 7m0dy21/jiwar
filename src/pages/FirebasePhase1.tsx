@@ -78,16 +78,11 @@ const FirebasePhase1 = () => {
         if (role === "customer") {
           const { account } = await signUpCustomer(email, password, fullName, phone || undefined);
           toast.success(`تم إنشاء الحساب. رقم حسابك: ${account.accountNumber}`);
-          toast.message("جاري تفعيل صلاحياتك…");
-          const ok = await waitForRoleClaim("customer");
-          if (!ok) toast.warning("لم يتم تفعيل صلاحية العميل بعد. سجّل خروج ثم دخول لتحديثها.");
         } else {
           const { account } = await signUpMerchant(email, password, storeName, phone || undefined);
           toast.success(`تم إنشاء حساب التاجر. المعرف: ${account.merchantId}`);
-          toast.message("جاري تفعيل صلاحيات التاجر…");
-          const ok = await waitForRoleClaim("merchant");
-          if (!ok) toast.warning("لم يتم تفعيل صلاحية التاجر بعد. سجّل خروج ثم دخول لتحديثها.");
         }
+
       } else {
         await signInEmail(email, password);
         toast.success("تم تسجيل الدخول");
