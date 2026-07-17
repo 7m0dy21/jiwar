@@ -3,7 +3,10 @@ import {
   getDoc,
   runTransaction,
   serverTimestamp,
+  updateDoc,
 } from "firebase/firestore";
+
+export const STARTING_WALLET_BALANCE = 1000;
 import { getDb } from "@/config/firebase";
 
 export interface CustomerAccount {
