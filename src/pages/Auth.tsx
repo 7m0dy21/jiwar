@@ -13,10 +13,11 @@ import {
   subscribeAuth,
 } from "@/lib/firebaseAuth";
 import { isFirebaseConfigured } from "@/config/firebase";
+import { isUserAdmin } from "@/lib/firebaseAdmins";
 
 const signupSchema = z.object({
   email: z.string().trim().email("بريد إلكتروني غير صالح").max(255),
-  password: z.string().min(6, "كلمة المرور يجب أن تكون 6 أحرف على الأقل").max(72),
+  password: z.string().min(6, "كلمة المرور 6 أحرف على الأقل").max(72),
   fullName: z.string().trim().min(1, "الاسم مطلوب").max(100),
   phone: z.string().trim().min(9, "رقم الجوال مطلوب").max(15),
 });
@@ -35,83 +36,50 @@ const Auth = () => {
   const [role, setRole] = useState<UserRole>("customer");
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
-    email: "",
-    password: "",
-    fullName: "",
-    phone: "",
-    storeName: "",
+    email: "", password: "", fullName: "", phone: "", storeName: "",
   });
 
   useEffect(() => {
     if (!isFirebaseConfigured()) return;
-    const unsub = subscribeAuth((u) => {
-      if (u) navigate("/firebase", { replace: true });
+    const unsub = subscribeAuth(async (u) => {
+      if (!u) return;
+      const admin = await isUserAdmin(u.uid).catch(() => false);
+      navigate(admin ? "/admin" : "/dashboard", { replace: true });
     });
     return () => unsub();
   }, [navigate]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    setForm((p) => ({ ...p, [e.target.name]: e.target.value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isFirebaseConfigured()) {
-      toast.error("إعدادات Firebase غير مكتملة");
-      return;
-    }
+    if (!isFirebaseConfigured()) { toast.error("إعدادات Firebase غير مكتملة"); return; }
     setLoading(true);
     try {
       if (mode === "signup") {
         const parsed = signupSchema.safeParse(form);
-        if (!parsed.success) {
-          toast.error(parsed.error.errors[0].message);
-          setLoading(false);
-          return;
-        }
-        if (role === "merchant" && !form.storeName.trim()) {
-          toast.error("اسم المحل مطلوب");
-          setLoading(false);
-          return;
-        }
+        if (!parsed.success) { toast.error(parsed.error.errors[0].message); setLoading(false); return; }
+        if (role === "merchant" && !form.storeName.trim()) { toast.error("اسم المحل مطلوب"); setLoading(false); return; }
         if (role === "customer") {
-          await signUpCustomer(
-            form.email.trim(),
-            form.password,
-            form.fullName.trim(),
-            form.phone.trim(),
-          );
+          await signUpCustomer(form.email.trim(), form.password, form.fullName.trim(), form.phone.trim());
         } else {
-          await signUpMerchant(
-            form.email.trim(),
-            form.password,
-            form.storeName.trim(),
-            form.phone.trim(),
-          );
+          await signUpMerchant(form.email.trim(), form.password, form.storeName.trim(), form.phone.trim());
         }
         toast.success("تم إنشاء الحساب بنجاح!");
-        navigate("/firebase", { replace: true });
       } else {
         const parsed = loginSchema.safeParse(form);
-        if (!parsed.success) {
-          toast.error(parsed.error.errors[0].message);
-          setLoading(false);
-          return;
-        }
+        if (!parsed.success) { toast.error(parsed.error.errors[0].message); setLoading(false); return; }
         await signInEmail(form.email.trim(), form.password);
         toast.success("تم تسجيل الدخول بنجاح!");
-        navigate("/firebase", { replace: true });
       }
     } catch (err: any) {
-      const msg = err?.code === "auth/invalid-credential"
-        ? "بيانات الدخول غير صحيحة"
-        : err?.code === "auth/email-already-in-use"
-        ? "البريد الإلكتروني مسجّل مسبقاً"
+      const msg = err?.code === "auth/invalid-credential" ? "بيانات الدخول غير صحيحة"
+        : err?.code === "auth/email-already-in-use" ? "البريد الإلكتروني مسجّل مسبقاً"
         : err?.message || "حدث خطأ";
       toast.error(msg);
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   };
 
   return (
@@ -127,22 +95,12 @@ const Auth = () => {
         <div className="bg-card border border-border rounded-2xl p-8 shadow-card">
           {mode === "signup" && (
             <div className="flex gap-2 mb-6">
-              <Button
-                type="button"
-                variant={role === "customer" ? "default" : "outline"}
+              <Button type="button" variant={role === "customer" ? "default" : "outline"}
                 className={`flex-1 ${role === "customer" ? "bg-gradient-primary text-primary-foreground" : ""}`}
-                onClick={() => setRole("customer")}
-              >
-                عميل
-              </Button>
-              <Button
-                type="button"
-                variant={role === "merchant" ? "default" : "outline"}
+                onClick={() => setRole("customer")}>عميل</Button>
+              <Button type="button" variant={role === "merchant" ? "default" : "outline"}
                 className={`flex-1 ${role === "merchant" ? "bg-gradient-primary text-primary-foreground" : ""}`}
-                onClick={() => setRole("merchant")}
-              >
-                تاجر
-              </Button>
+                onClick={() => setRole("merchant")}>تاجر</Button>
             </div>
           )}
 
@@ -167,7 +125,6 @@ const Auth = () => {
                 )}
               </>
             )}
-
             <div>
               <Label htmlFor="email" className="font-cairo">البريد الإلكتروني</Label>
               <Input id="email" name="email" type="email" value={form.email} onChange={handleChange} required className="mt-1" dir="ltr" />
@@ -184,11 +141,8 @@ const Auth = () => {
 
           <p className="text-center text-sm text-muted-foreground mt-6 font-ibm">
             {mode === "login" ? "ليس لديك حساب؟" : "لديك حساب بالفعل؟"}{" "}
-            <button
-              type="button"
-              onClick={() => setMode(mode === "login" ? "signup" : "login")}
-              className="text-primary font-bold hover:underline"
-            >
+            <button type="button" onClick={() => setMode(mode === "login" ? "signup" : "login")}
+              className="text-primary font-bold hover:underline">
               {mode === "login" ? "سجّل الآن" : "سجّل دخولك"}
             </button>
           </p>

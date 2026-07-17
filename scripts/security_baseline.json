@@ -1,4 +1,0 @@
-{
-  "_comment": "Accepted security findings. Adding an entry here requires PR justification. Format: '<CATEGORY>:<name>'. Categories: RLS_DISABLED, RLS_NO_POLICIES, SECDEF_ANON_EXECUTE, SECDEF_PUBLIC_EXECUTE.",
-  "accepted": []
-}
