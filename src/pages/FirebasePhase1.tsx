@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
+import { doc, onSnapshot } from "firebase/firestore";
+import { getDb } from "@/config/firebase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
-import { Copy, LogOut, Store, User as UserIcon } from "lucide-react";
+import { Copy, LogOut, Store, User as UserIcon, Wallet } from "lucide-react";
 import {
   signUpCustomer,
   signUpMerchant,
