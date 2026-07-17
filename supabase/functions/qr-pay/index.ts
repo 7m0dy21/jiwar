@@ -64,6 +64,19 @@ function normalizeQrToken(input: string): string {
 function parseQrToken(token: string): ParsedQrToken {
   const cleaned = normalizeQrToken(token);
   const parts = cleaned.split(".");
+  if (/^JIWARs1$/i.test(parts[0])) {
+    const [, accountNumber, signature] = parts;
+    if (!accountNumber || !/^\d{6,20}$/.test(accountNumber) || !signature) throw new Error("كود غير صالح");
+    return {
+      version: "s1",
+      customerId: "",
+      customerUserId: null,
+      accountNumber,
+      timestamp: 0,
+      signature,
+      signedPayload: `s1.${accountNumber}`,
+    };
+  }
   if (/^JIWARv3$/i.test(parts[0])) {
     const [, compactCustomerId, compactCustomerUserId, ts36, signature] = parts;
     const timestamp = parseInt(ts36, 36);
@@ -72,6 +85,7 @@ function parseQrToken(token: string): ParsedQrToken {
       version: "v3",
       customerId: compactToUuid(compactCustomerId),
       customerUserId: compactToUuid(compactCustomerUserId),
+      accountNumber: null,
       timestamp,
       signature,
       signedPayload: `${compactCustomerId.toLowerCase()}.${compactCustomerUserId.toLowerCase()}.${ts36.toLowerCase()}`,
@@ -88,6 +102,7 @@ function parseQrToken(token: string): ParsedQrToken {
       version: "v2",
       customerId,
       customerUserId: null,
+      accountNumber: null,
       timestamp,
       signature,
       signedPayload: `${customerId}.${timestamp}`,
@@ -102,6 +117,7 @@ function parseQrToken(token: string): ParsedQrToken {
       version: "v2",
       customerId,
       customerUserId,
+      accountNumber: null,
       timestamp,
       signature,
       signedPayload: `${customerId}.${customerUserId}.${timestamp}`,
