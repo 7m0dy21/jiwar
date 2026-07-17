@@ -197,6 +197,37 @@ const FirebasePhase1 = () => {
             </CardContent>
           </Card>
 
+          <Card className={customer.isVerified ? "border-primary/40" : "border-destructive/40"}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-normal flex items-center justify-between">
+                <span>حالة التحقق (نفاذ)</span>
+                <span className={customer.isVerified ? "text-primary font-bold" : "text-destructive font-bold"}>
+                  {customer.isVerified ? "موثّق ✓" : "غير موثّق"}
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                {customer.isVerified
+                  ? "حسابك موثّق ويمكنك استقبال طلبات الدفع."
+                  : "لن تستطيع الموافقة على أي عملية دفع حتى يتم توثيق الحساب."}
+              </p>
+              <Button
+                size="sm"
+                variant={customer.isVerified ? "outline" : "default"}
+                className="w-full"
+                onClick={async () => {
+                  try {
+                    await setCustomerVerified(uid, !customer.isVerified);
+                    toast.success(customer.isVerified ? "تم إلغاء التوثيق" : "تم توثيق الحساب");
+                  } catch (e: any) { toast.error(e?.message || "فشل التحديث"); }
+                }}
+              >
+                {customer.isVerified ? "إلغاء التوثيق (Admin)" : "توثيق الحساب (Admin/Nafath)"}
+              </Button>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader><CardTitle>رقم الحساب الثابت</CardTitle></CardHeader>
             <CardContent className="space-y-4 text-center">
