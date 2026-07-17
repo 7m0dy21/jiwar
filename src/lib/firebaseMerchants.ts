@@ -3,8 +3,11 @@ import {
   getDoc,
   runTransaction,
   serverTimestamp,
+  updateDoc,
 } from "firebase/firestore";
 import { getDb } from "@/config/firebase";
+
+export const MERCHANT_STARTING_BALANCE = 0;
 
 export interface MerchantAccount {
   uid: string;
@@ -12,10 +15,21 @@ export interface MerchantAccount {
   storeName: string;
   phone: string | null;
   email: string;
+  walletBalance: number;
   createdAt: number | null;
 }
 
 const MERCHANT_COUNTER_START = 100_000; // 6-digit merchant ids: M100000+
+
+const toMerchant = (uid: string, d: any): MerchantAccount => ({
+  uid,
+  merchantId: d.merchant_id,
+  storeName: d.store_name ?? "",
+  phone: d.phone ?? null,
+  email: d.email ?? "",
+  walletBalance: typeof d.wallet_balance === "number" ? d.wallet_balance : 0,
+  createdAt: d.created_at?.toMillis?.() ?? null,
+});
 
 export const ensureMerchantAccount = async (
   uid: string,
@@ -28,14 +42,11 @@ export const ensureMerchantAccount = async (
   const existing = await getDoc(merchantRef);
   if (existing.exists()) {
     const d = existing.data() as any;
-    return {
-      uid,
-      merchantId: d.merchant_id,
-      storeName: d.store_name ?? "",
-      phone: d.phone ?? null,
-      email: d.email ?? "",
-      createdAt: d.created_at?.toMillis?.() ?? null,
-    };
+    if (typeof d.wallet_balance !== "number") {
+      await updateDoc(merchantRef, { wallet_balance: MERCHANT_STARTING_BALANCE });
+      d.wallet_balance = MERCHANT_STARTING_BALANCE;
+    }
+    return toMerchant(uid, d);
   }
 
   const merchantId = await runTransaction(db, async (tx) => {
@@ -58,6 +69,7 @@ export const ensureMerchantAccount = async (
       store_name: input.storeName,
       phone: input.phone,
       email: input.email,
+      wallet_balance: MERCHANT_STARTING_BALANCE,
       created_at: serverTimestamp(),
     });
 
@@ -70,6 +82,7 @@ export const ensureMerchantAccount = async (
     storeName: input.storeName,
     phone: input.phone,
     email: input.email,
+    walletBalance: MERCHANT_STARTING_BALANCE,
     createdAt: Date.now(),
   };
 };
@@ -78,12 +91,13 @@ export const getMerchantByUid = async (uid: string): Promise<MerchantAccount | n
   const snap = await getDoc(doc(getDb(), "merchants", uid));
   if (!snap.exists()) return null;
   const d = snap.data() as any;
-  return {
-    uid,
-    merchantId: d.merchant_id,
-    storeName: d.store_name ?? "",
-    phone: d.phone ?? null,
-    email: d.email ?? "",
-    createdAt: d.created_at?.toMillis?.() ?? null,
-  };
+  if (typeof d.wallet_balance !== "number") {
+    try {
+      await updateDoc(doc(getDb(), "merchants", uid), { wallet_balance: MERCHANT_STARTING_BALANCE });
+      d.wallet_balance = MERCHANT_STARTING_BALANCE;
+    } catch {
+      /* ignore */
+    }
+  }
+  return toMerchant(uid, d);
 };
