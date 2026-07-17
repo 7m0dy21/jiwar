@@ -323,13 +323,20 @@ Deno.serve(async (req) => {
     }
 
     if (action === "pay") {
-      const { token, amount } = body;
+      const { token: rawToken, amount } = body;
       const numAmount = Number(amount);
-      if (!token || typeof token !== "string") {
+      if (!rawToken || typeof rawToken !== "string") {
         await logAudit(null, null, "invalid_signature", numAmount || null, "كود مفقود");
         throw new Error("token مطلوب");
       }
       if (!numAmount || numAmount <= 0) throw new Error("المبلغ غير صالح");
+
+      // Allow bare account number for static payments
+      let token = rawToken.trim();
+      if (/^\d{6,20}$/.test(token)) {
+        const sig = await hmacSignCompact(`s1.${token}`, SECRET);
+        token = `JIWARs1.${token}.${sig}`;
+      }
 
       let parsed: ParsedQrToken;
       try {
@@ -344,7 +351,7 @@ Deno.serve(async (req) => {
       const merchantId = mer?.id || null;
 
       const now = Math.floor(Date.now() / 1000);
-      if (now - parsed.timestamp > TTL_SECONDS) {
+      if (parsed.version !== "s1" && now - parsed.timestamp > TTL_SECONDS) {
         await logAudit(parsed.customerId, merchantId, "expired", numAmount, "انتهت صلاحية الكود");
         // Notify customer
         const { customer: cust } = await resolveCustomer(admin, parsed);
