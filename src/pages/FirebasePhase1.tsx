@@ -186,6 +186,8 @@ const FirebasePhase1 = () => {
 
 
   if (uid && merchant) {
+    const pendingSent = txs.filter((t) => t.status === "pending");
+    const completedReceived = txs.filter((t) => t.status === "completed");
     return (
       <div className="min-h-screen bg-background p-6">
         <div className="max-w-md mx-auto space-y-6">
@@ -200,35 +202,59 @@ const FirebasePhase1 = () => {
           <Card>
             <CardHeader><CardTitle>تحصيل دفعة</CardTitle></CardHeader>
             <CardContent>
+              <div className="mb-3">
+                <MerchantQRScanner onDetected={(acct) => setScanAcct(acct)} />
+              </div>
               <form onSubmit={submitScan} className="space-y-3">
                 <div>
-                  <Label>رقم حساب العميل (من QR)</Label>
+                  <Label>رقم حساب العميل</Label>
                   <Input dir="ltr" value={scanAcct} onChange={(e) => setScanAcct(e.target.value)} placeholder="1000000001" required />
                 </div>
                 <div>
                   <Label>المبلغ (ر.س)</Label>
                   <Input dir="ltr" type="number" min="0.01" step="0.01" value={scanAmount} onChange={(e) => setScanAmount(e.target.value)} required />
                 </div>
-                <Button type="submit" className="w-full" disabled={loading}>إنشاء طلب دفع</Button>
+                <Button type="submit" className="w-full" disabled={loading}>إرسال طلب الدفع للعميل</Button>
               </form>
               <p className="text-xs text-muted-foreground mt-3 text-center">
-                يتم إنشاء سجل يربط رقم الحساب بمعرف تاجرك. لا يمكنك قراءة بيانات العميل الشخصية.
+                يُرسل الطلب فوراً للعميل لموافقته. لا يمكنك رؤية بياناته الشخصية.
               </p>
             </CardContent>
           </Card>
 
+          {pendingSent.length > 0 && (
+            <Card>
+              <CardHeader><CardTitle>بانتظار موافقة العميل</CardTitle></CardHeader>
+              <CardContent>
+                <ul className="space-y-2">
+                  {pendingSent.map((t) => (
+                    <li key={t.id} className="flex justify-between border-b pb-2 text-sm">
+                      <div>
+                        <p className="font-semibold">{t.amount} ر.س</p>
+                        <p className="text-xs text-muted-foreground" dir="ltr">حساب: {t.account_number}</p>
+                      </div>
+                      <span className="text-xs text-amber-600">قيد الانتظار</span>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+
           <Card>
-            <CardHeader><CardTitle>عمليات متجري</CardTitle></CardHeader>
+            <CardHeader><CardTitle>المدفوعات المستلمة</CardTitle></CardHeader>
             <CardContent>
-              {txs.length === 0 && <p className="text-sm text-muted-foreground text-center">لا توجد عمليات</p>}
+              {completedReceived.length === 0 && <p className="text-sm text-muted-foreground text-center">لا توجد مدفوعات مكتملة</p>}
               <ul className="space-y-2">
-                {txs.map((t) => (
+                {completedReceived.map((t) => (
                   <li key={t.id} className="flex justify-between border-b pb-2 text-sm">
                     <div>
                       <p className="font-semibold">{t.amount} ر.س</p>
                       <p className="text-xs text-muted-foreground" dir="ltr">حساب: {t.account_number}</p>
                     </div>
-                    <span className="text-xs">{t.status}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {t.created_at ? new Date(t.created_at).toLocaleString("ar-SA") : ""}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -238,6 +264,7 @@ const FirebasePhase1 = () => {
       </div>
     );
   }
+
 
   // -------- Auth forms --------
   return (
