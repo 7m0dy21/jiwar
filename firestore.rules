@@ -4,25 +4,28 @@ service cloud.firestore {
 
     function isSignedIn() { return request.auth != null; }
     function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
+    function isAdmin() { return isSignedIn() && request.auth.token.role == 'admin'; }
+
+    // A merchant is any signed-in user that owns a merchants/{uid} doc.
     function isMerchant() {
-      return isSignedIn() && request.auth.token.role == 'merchant';
+      return isSignedIn() && exists(/databases/$(database)/documents/merchants/$(request.auth.uid));
     }
-    function isAdmin() {
-      return isSignedIn() && request.auth.token.role == 'admin';
+    function merchantIdOf(uid) {
+      return get(/databases/$(database)/documents/merchants/$(uid)).data.merchant_id;
     }
 
-    // customers/{uid} — private customer profile.
-    // Only the customer (or admin) may read. Merchants have NO read access.
+    // ---------- customers/{uid} ----------
+    // Personal profile. Only the customer (or admin) can read.
+    // Merchants have NO read access to customer profile data.
     match /customers/{uid} {
       allow read: if isOwner(uid) || isAdmin();
 
-      // Create only on first signup; account_number is set here and immutable after.
       allow create: if isOwner(uid)
         && request.resource.data.uid == uid
         && request.resource.data.account_number is string
         && request.resource.data.account_number.size() >= 10;
 
-      // Customer may update non-financial profile fields, but never account_number.
+      // Customer may edit profile fields, never account_number.
       allow update: if isOwner(uid)
         && request.resource.data.account_number == resource.data.account_number
         && request.resource.data.uid == resource.data.uid;
@@ -30,38 +33,83 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // account_numbers/{n} — reservation index. Stores ONLY {uid, createdAt}.
-    // Any authenticated user (including merchants) can read to resolve an
-    // account_number → uid for routing a payment. No personal data is exposed.
+    // ---------- merchants/{uid} ----------
+    // Store profile. Owner or admin full read; other authenticated users may
+    // read to confirm a merchant exists (needed for scanning receipts).
+    match /merchants/{uid} {
+      allow read: if isSignedIn();
+
+      allow create: if isOwner(uid)
+        && request.resource.data.uid == uid
+        && request.resource.data.merchant_id is string
+        && request.resource.data.merchant_id.size() >= 4;
+
+      allow update: if isOwner(uid)
+        && request.resource.data.merchant_id == resource.data.merchant_id
+        && request.resource.data.uid == resource.data.uid;
+
+      allow delete: if isAdmin();
+    }
+
+    // ---------- account_numbers/{n} ----------
+    // Reservation index enforcing uniqueness. Payload = {uid, createdAt} only.
+    // Any signed-in user (including merchants) may read to resolve
+    // account_number → uid for routing a transaction. No PII exposed.
     match /account_numbers/{num} {
       allow read: if isSignedIn();
-      // Writes are done inside a transaction with customers/{uid}. Enforce that
-      // the payload carries the caller's uid.
       allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
       allow update, delete: if isAdmin();
     }
 
-    // meta/counters — atomic account-number counter.
-    match /meta/{docId} {
-      allow read, write: if isSignedIn(); // guarded by transaction semantics
+    // ---------- merchant_ids/{id} ----------
+    match /merchant_ids/{mid} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isAdmin();
     }
 
-    // payments/{id} — payment records created by merchants against an account_number.
-    // Merchants may CREATE. They may READ only their own payments.
-    // Customers may READ payments addressed to their account.
-    match /payments/{id} {
+    // ---------- meta/counters ----------
+    match /meta/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // ---------- transactions/{id} ----------
+    // Linked payment records. Created by merchants; each record explicitly
+    // ties account_number ↔ merchant_id ↔ amount ↔ timestamp.
+    // Merchants MAY create transactions, but ONLY for their own merchant_id.
+    // Merchants cannot read customers/{uid} — the transaction record carries
+    // only the account_number and customer_uid needed for the transaction.
+    match /transactions/{txId} {
       allow create: if isMerchant()
         && request.resource.data.merchant_uid == request.auth.uid
+        && request.resource.data.merchant_id == merchantIdOf(request.auth.uid)
         && request.resource.data.account_number is string
+        && request.resource.data.account_number.size() >= 10
+        && request.resource.data.customer_uid is string
         && request.resource.data.amount is number
         && request.resource.data.amount > 0
         && request.resource.data.status == 'pending';
 
+      // Read: merchant sees their own; customer sees transactions routed to them.
       allow read: if isAdmin()
-        || (isMerchant() && resource.data.merchant_uid == request.auth.uid)
+        || (isSignedIn() && resource.data.merchant_uid == request.auth.uid)
         || (isSignedIn() && resource.data.customer_uid == request.auth.uid);
 
-      allow update: if isAdmin(); // status transitions happen server-side later
+      // Only the target customer can approve/reject their own pending tx.
+      allow update: if isAdmin()
+        || (
+          isSignedIn()
+          && resource.data.customer_uid == request.auth.uid
+          && resource.data.status == 'pending'
+          && request.resource.data.status in ['approved','rejected']
+          // Immutable core fields
+          && request.resource.data.account_number == resource.data.account_number
+          && request.resource.data.customer_uid == resource.data.customer_uid
+          && request.resource.data.merchant_uid == resource.data.merchant_uid
+          && request.resource.data.merchant_id == resource.data.merchant_id
+          && request.resource.data.amount == resource.data.amount
+        );
+
       allow delete: if isAdmin();
     }
 

@@ -1,7 +1,7 @@
 {
   "indexes": [
     {
-      "collectionGroup": "payments",
+      "collectionGroup": "transactions",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "merchant_uid", "order": "ASCENDING" },
@@ -9,7 +9,7 @@
       ]
     },
     {
-      "collectionGroup": "payments",
+      "collectionGroup": "transactions",
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "customer_uid", "order": "ASCENDING" },
@@ -21,6 +21,13 @@
     {
       "collectionGroup": "customers",
       "fieldPath": "account_number",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" }
+      ]
+    },
+    {
+      "collectionGroup": "merchants",
+      "fieldPath": "merchant_id",
       "indexes": [
         { "order": "ASCENDING", "queryScope": "COLLECTION" }
       ]
