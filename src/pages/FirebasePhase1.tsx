@@ -183,7 +183,7 @@ const FirebasePhase1 = () => {
     const completed = txs.filter((t) => t.status === "completed");
     return (
       <div className="min-h-screen bg-background p-6">
-        <CustomerApprovalModal customerUid={uid} walletBalance={customer.walletBalance} />
+        <CustomerApprovalModal customerUid={uid} walletBalance={customer.walletBalance} isVerified={customer.isVerified} />
         <div className="max-w-md mx-auto space-y-6">
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold">حسابي في جوار</h1>
