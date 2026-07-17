@@ -259,8 +259,15 @@ Deno.serve(async (req) => {
     }
 
     if (action === "lookup") {
-      const { token } = body;
-      if (!token || typeof token !== "string") throw new Error("token مطلوب");
+      const { token: rawToken } = body;
+      if (!rawToken || typeof rawToken !== "string") throw new Error("token مطلوب");
+      // Allow merchant to enter just the account number (digits only) — auto-wrap as static token
+      let token = rawToken.trim();
+      if (/^\d{6,20}$/.test(token)) {
+        if (!SECRET) throw new Error("JIWAR_QR_SECRET missing");
+        const sig = await hmacSignCompact(`s1.${token}`, SECRET);
+        token = `JIWARs1.${token}.${sig}`;
+      }
       let parsed: ParsedQrToken;
       try {
         parsed = parseQrToken(token);
@@ -271,7 +278,7 @@ Deno.serve(async (req) => {
       const { data: mer } = await admin.from("merchants").select("id").eq("user_id", userId).maybeSingle();
       if (!mer) throw new Error("حساب التاجر غير موجود - سجّل دخول من حساب تاجر");
       const now = Math.floor(Date.now() / 1000);
-      if (now - parsed.timestamp > TTL_SECONDS) {
+      if (parsed.version !== "s1" && now - parsed.timestamp > TTL_SECONDS) {
         await logAudit(parsed.customerId, mer.id, "expired", null, "انتهت صلاحية الكود (lookup)");
         throw new Error("انتهت صلاحية الكود - اطلب من العميل تحديثه");
       }
@@ -286,7 +293,7 @@ Deno.serve(async (req) => {
         throw new Error("تعذر قراءة بيانات العميل");
       }
       if (!cust) {
-        await logAudit(parsed.customerId, mer.id, "customer_not_found", null, "معرّف العميل في الكود غير موجود");
+        await logAudit(parsed.customerId || null, mer.id, "customer_not_found", null, "معرّف العميل في الكود غير موجود");
         throw new Error("العميل غير موجود - قد يكون الكود قديماً أو الحساب محذوفاً");
       }
       if (relinked) {
@@ -298,17 +305,20 @@ Deno.serve(async (req) => {
         await logAudit(cust.id, mer.id, "onboarding_incomplete", null, "تم التعرف على العميل لكن لم يكمل التحقق");
       }
       return jsonResponse({
+        token,
         customer: {
           id: cust.id,
           user_id: cust.user_id,
           full_name: profile?.full_name || "عميل",
           phone: profile?.phone || null,
+          account_number: (cust as any).account_number || null,
           available_balance: cust.available_balance,
           credit_limit: cust.credit_limit,
           can_pay: canPay,
           verification_reason: canPay ? null : "تم التعرف على العميل، لكنه لم يكمل التحقق (نفاذ/سمة/نافذ) بعد",
         },
-        expires_at: parsed.timestamp + TTL_SECONDS,
+        expires_at: parsed.version === "s1" ? null : parsed.timestamp + TTL_SECONDS,
+        static: parsed.version === "s1",
       });
     }
 
