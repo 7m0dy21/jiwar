@@ -1,12 +1,18 @@
-import { useState, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import jiwarLogo from "@/assets/jiwar-logo.png";
 import { toast } from "sonner";
 import { z } from "zod";
+import {
+  signInEmail,
+  signUpCustomer,
+  signUpMerchant,
+  subscribeAuth,
+} from "@/lib/firebaseAuth";
+import { isFirebaseConfigured } from "@/config/firebase";
 
 const signupSchema = z.object({
   email: z.string().trim().email("بريد إلكتروني غير صالح").max(255),
@@ -20,16 +26,14 @@ const loginSchema = z.object({
   password: z.string().min(1, "كلمة المرور مطلوبة"),
 });
 
-type AuthMode = "login" | "signup" | "reset" | "update-password";
+type AuthMode = "login" | "signup";
 type UserRole = "merchant" | "customer";
 
 const Auth = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
   const [mode, setMode] = useState<AuthMode>("login");
   const [role, setRole] = useState<UserRole>("customer");
   const [loading, setLoading] = useState(false);
-  const [newPassword, setNewPassword] = useState("");
   const [form, setForm] = useState({
     email: "",
     password: "",
@@ -39,10 +43,12 @@ const Auth = () => {
   });
 
   useEffect(() => {
-    if (searchParams.get("mode") === "update-password") {
-      setMode("update-password");
-    }
-  }, [searchParams]);
+    if (!isFirebaseConfigured()) return;
+    const unsub = subscribeAuth((u) => {
+      if (u) navigate("/firebase", { replace: true });
+    });
+    return () => unsub();
+  }, [navigate]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -50,75 +56,59 @@ const Auth = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isFirebaseConfigured()) {
+      toast.error("إعدادات Firebase غير مكتملة");
+      return;
+    }
     setLoading(true);
-
     try {
-      if (mode === "update-password") {
-        if (newPassword.length < 6) {
-          toast.error("كلمة المرور يجب أن تكون 6 أحرف على الأقل");
+      if (mode === "signup") {
+        const parsed = signupSchema.safeParse(form);
+        if (!parsed.success) {
+          toast.error(parsed.error.errors[0].message);
           setLoading(false);
           return;
         }
-        const { error } = await supabase.auth.updateUser({ password: newPassword });
-        if (error) throw error;
-        toast.success("تم تغيير كلمة المرور بنجاح!");
-        navigate("/dashboard");
-      } else if (mode === "reset") {
-        if (!form.email.trim()) {
-          toast.error("يرجى إدخال البريد الإلكتروني");
+        if (role === "merchant" && !form.storeName.trim()) {
+          toast.error("اسم المحل مطلوب");
           setLoading(false);
           return;
         }
-        const { error } = await supabase.auth.resetPasswordForEmail(form.email.trim(), {
-          redirectTo: `${window.location.origin}/auth?mode=update-password`,
-        });
-        if (error) throw error;
-        toast.success("تم إرسال رابط استعادة كلمة المرور إلى بريدك الإلكتروني");
-        setMode("login");
-      } else if (mode === "signup") {
-        const validation = signupSchema.safeParse(form);
-        if (!validation.success) {
-          toast.error(validation.error.errors[0].message);
-          setLoading(false);
-          return;
+        if (role === "customer") {
+          await signUpCustomer(
+            form.email.trim(),
+            form.password,
+            form.fullName.trim(),
+            form.phone.trim(),
+          );
+        } else {
+          await signUpMerchant(
+            form.email.trim(),
+            form.password,
+            form.storeName.trim(),
+            form.phone.trim(),
+          );
         }
-
-        const { error } = await supabase.auth.signUp({
-          email: form.email.trim(),
-          password: form.password,
-          options: {
-            emailRedirectTo: window.location.origin,
-            data: {
-              full_name: form.fullName.trim(),
-              phone: form.phone.trim(),
-              role,
-              store_name: role === "merchant" ? form.storeName.trim() : undefined,
-            },
-          },
-        });
-
-        if (error) throw error;
         toast.success("تم إنشاء الحساب بنجاح!");
-        navigate("/dashboard");
+        navigate("/firebase", { replace: true });
       } else {
-        const validation = loginSchema.safeParse(form);
-        if (!validation.success) {
-          toast.error(validation.error.errors[0].message);
+        const parsed = loginSchema.safeParse(form);
+        if (!parsed.success) {
+          toast.error(parsed.error.errors[0].message);
           setLoading(false);
           return;
         }
-
-        const { error } = await supabase.auth.signInWithPassword({
-          email: form.email.trim(),
-          password: form.password,
-        });
-
-        if (error) throw error;
+        await signInEmail(form.email.trim(), form.password);
         toast.success("تم تسجيل الدخول بنجاح!");
-        navigate("/dashboard");
+        navigate("/firebase", { replace: true });
       }
-    } catch (error: any) {
-      toast.error(error.message || "حدث خطأ");
+    } catch (err: any) {
+      const msg = err?.code === "auth/invalid-credential"
+        ? "بيانات الدخول غير صحيحة"
+        : err?.code === "auth/email-already-in-use"
+        ? "البريد الإلكتروني مسجّل مسبقاً"
+        : err?.message || "حدث خطأ";
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -130,7 +120,7 @@ const Auth = () => {
         <div className="text-center mb-8">
           <img src={jiwarLogo} alt="جوار" className="w-24 mx-auto mb-4" />
           <h1 className="text-2xl font-cairo font-bold text-foreground">
-            {mode === "login" ? "تسجيل الدخول" : mode === "signup" ? "إنشاء حساب جديد" : mode === "reset" ? "استعادة كلمة المرور" : "تعيين كلمة مرور جديدة"}
+            {mode === "login" ? "تسجيل الدخول" : "إنشاء حساب جديد"}
           </h1>
         </div>
 
@@ -160,7 +150,9 @@ const Auth = () => {
             {mode === "signup" && (
               <>
                 <div>
-                  <Label htmlFor="fullName" className="font-cairo">الاسم الكامل</Label>
+                  <Label htmlFor="fullName" className="font-cairo">
+                    {role === "merchant" ? "اسم المسؤول" : "الاسم الكامل"}
+                  </Label>
                   <Input id="fullName" name="fullName" value={form.fullName} onChange={handleChange} required className="mt-1" />
                 </div>
                 <div>
@@ -176,64 +168,29 @@ const Auth = () => {
               </>
             )}
 
-            {mode === "update-password" ? (
-              <div>
-                <Label htmlFor="newPassword" className="font-cairo">كلمة المرور الجديدة</Label>
-                <Input id="newPassword" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required className="mt-1" dir="ltr" minLength={6} />
-              </div>
-            ) : (
-              <>
-                <div>
-                  <Label htmlFor="email" className="font-cairo">البريد الإلكتروني</Label>
-                  <Input id="email" name="email" type="email" value={form.email} onChange={handleChange} required className="mt-1" dir="ltr" />
-                </div>
-                {mode !== "reset" && (
-                  <div>
-                    <Label htmlFor="password" className="font-cairo">كلمة المرور</Label>
-                    <Input id="password" name="password" type="password" value={form.password} onChange={handleChange} required className="mt-1" dir="ltr" />
-                  </div>
-                )}
-
-                {mode === "login" && (
-                  <div className="text-left">
-                    <button
-                      type="button"
-                      onClick={() => setMode("reset")}
-                      className="text-sm text-primary hover:underline font-ibm"
-                    >
-                      نسيت كلمة المرور؟
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
+            <div>
+              <Label htmlFor="email" className="font-cairo">البريد الإلكتروني</Label>
+              <Input id="email" name="email" type="email" value={form.email} onChange={handleChange} required className="mt-1" dir="ltr" />
+            </div>
+            <div>
+              <Label htmlFor="password" className="font-cairo">كلمة المرور</Label>
+              <Input id="password" name="password" type="password" value={form.password} onChange={handleChange} required className="mt-1" dir="ltr" />
+            </div>
 
             <Button type="submit" disabled={loading} className="w-full bg-gradient-primary text-primary-foreground font-bold text-lg py-6 rounded-xl glow-green">
-              {loading ? "جارٍ التحميل..." : mode === "login" ? "دخول" : mode === "signup" ? "إنشاء حساب" : mode === "reset" ? "إرسال رابط الاستعادة" : "تحديث كلمة المرور"}
+              {loading ? "جارٍ التحميل..." : mode === "login" ? "دخول" : "إنشاء حساب"}
             </Button>
           </form>
 
           <p className="text-center text-sm text-muted-foreground mt-6 font-ibm">
-            {mode === "reset" ? (
-              <button
-                type="button"
-                onClick={() => setMode("login")}
-                className="text-primary font-bold hover:underline"
-              >
-                العودة لتسجيل الدخول
-              </button>
-            ) : (
-              <>
-                {mode === "login" ? "ليس لديك حساب؟" : "لديك حساب بالفعل؟"}{" "}
-                <button
-                  type="button"
-                  onClick={() => setMode(mode === "login" ? "signup" : "login")}
-                  className="text-primary font-bold hover:underline"
-                >
-                  {mode === "login" ? "سجّل الآن" : "سجّل دخولك"}
-                </button>
-              </>
-            )}
+            {mode === "login" ? "ليس لديك حساب؟" : "لديك حساب بالفعل؟"}{" "}
+            <button
+              type="button"
+              onClick={() => setMode(mode === "login" ? "signup" : "login")}
+              className="text-primary font-bold hover:underline"
+            >
+              {mode === "login" ? "سجّل الآن" : "سجّل دخولك"}
+            </button>
           </p>
         </div>
       </div>
