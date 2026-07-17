@@ -75,21 +75,35 @@ const MerchantMonthlyReport = ({ merchantId, merchantUserId }: Props) => {
     return { approvedAmt, pendingAmt, failedAmt, transferredAmt, pendingTransfer, outstanding };
   }, [requests, transfers]);
 
-  const exportCSV = () => {
-    const header = ["التاريخ","المبلغ","الحالة","السبب","معرف المعاملة"];
-    const rows = requests.map(r => [
-      new Date(r.created_at).toLocaleString("ar-SA"),
-      Number(r.amount).toFixed(2),
-      statusMeta[r.status]?.label || r.status,
-      (r.reason || "").replace(/[\n,]/g, " "),
-      r.transaction_id || "",
-    ]);
-    const csv = [header, ...rows].map(r => r.join(",")).join("\n");
-    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url; a.download = `settlement-${month}.csv`; a.click();
-    URL.revokeObjectURL(url);
+  const exportRequestsCSV = () => {
+    import("@/lib/csv").then(({ downloadCSV }) =>
+      downloadCSV(
+        `requests-${month}.csv`,
+        ["التاريخ", "المبلغ", "الحالة", "السبب", "معرف المعاملة"],
+        requests.map((r) => [
+          new Date(r.created_at).toLocaleString("ar-SA"),
+          Number(r.amount).toFixed(2),
+          statusMeta[r.status]?.label || r.status,
+          r.reason || "",
+          r.transaction_id || "",
+        ])
+      )
+    );
+  };
+
+  const exportTransfersCSV = () => {
+    import("@/lib/csv").then(({ downloadCSV }) =>
+      downloadCSV(
+        `settlements-${month}.csv`,
+        ["التاريخ", "معرف التحويل", "المبلغ", "الحالة"],
+        transfers.map((t) => [
+          new Date(t.created_at).toLocaleString("ar-SA"),
+          t.id,
+          Number(t.amount).toFixed(2),
+          t.status,
+        ])
+      )
+    );
   };
 
   const cards = [
@@ -108,8 +122,11 @@ const MerchantMonthlyReport = ({ merchantId, merchantUserId }: Props) => {
         </div>
         <div className="flex items-center gap-2">
           <Input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="w-44 font-ibm" />
-          <Button size="sm" variant="outline" onClick={exportCSV} disabled={!requests.length} className="font-cairo">
-            تصدير CSV
+          <Button size="sm" variant="outline" onClick={exportRequestsCSV} disabled={!requests.length} className="font-cairo">
+            تصدير الطلبات
+          </Button>
+          <Button size="sm" variant="outline" onClick={exportTransfersCSV} disabled={!transfers.length} className="font-cairo">
+            تصدير التسويات
           </Button>
         </div>
       </div>

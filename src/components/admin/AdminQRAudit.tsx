@@ -4,8 +4,9 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { RefreshCw, ShieldQuestion } from "lucide-react";
+import { RefreshCw, ShieldQuestion, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { downloadCSV } from "@/lib/csv";
 
 interface AuditRow {
   id: string;
@@ -73,6 +74,42 @@ const AdminQRAudit = () => {
     return () => { supabase.removeChannel(ch); };
   }, []);
 
+  const exportAudit = () => {
+    downloadCSV(
+      `qr-audit-${new Date().toISOString().slice(0, 10)}.csv`,
+      ["التاريخ", "الحدث", "المبلغ", "السبب", "العميل", "التاجر", "بيانات إضافية"],
+      filtered.map((r) => [
+        new Date(r.created_at).toLocaleString("ar-SA"),
+        eventLabel[r.event_type] || r.event_type,
+        r.amount != null ? Number(r.amount).toFixed(2) : "",
+        r.reason || "",
+        r.customer_id || "",
+        r.merchant_id || "",
+        r.metadata ? JSON.stringify(r.metadata) : "",
+      ])
+    );
+  };
+
+  const exportSettlements = async () => {
+    const { data } = await supabase
+      .from("merchant_transfers")
+      .select("id, merchant_id, amount, status, iban, created_at")
+      .order("created_at", { ascending: false })
+      .limit(1000);
+    downloadCSV(
+      `settlements-${new Date().toISOString().slice(0, 10)}.csv`,
+      ["التاريخ", "معرف التحويل", "التاجر", "المبلغ", "الحالة", "IBAN"],
+      (data || []).map((t: any) => [
+        new Date(t.created_at).toLocaleString("ar-SA"),
+        t.id,
+        t.merchant_id,
+        Number(t.amount).toFixed(2),
+        t.status,
+        t.iban || "",
+      ])
+    );
+  };
+
   const filtered = rows.filter((r) =>
     !filter ||
     r.event_type.includes(filter) ||
@@ -97,6 +134,12 @@ const AdminQRAudit = () => {
           />
           <Button size="sm" variant="outline" onClick={load} disabled={loading} className="gap-1">
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /> تحديث
+          </Button>
+          <Button size="sm" variant="outline" onClick={exportAudit} disabled={!filtered.length} className="gap-1 font-cairo">
+            <Download className="w-4 h-4" /> تصدير السجل
+          </Button>
+          <Button size="sm" variant="outline" onClick={exportSettlements} className="gap-1 font-cairo">
+            <Download className="w-4 h-4" /> تصدير التسويات
           </Button>
         </div>
       </div>
