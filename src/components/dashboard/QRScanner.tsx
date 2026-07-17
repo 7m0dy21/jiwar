@@ -289,8 +289,14 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
             </div>
 
             <div>
-              <Label className="font-cairo">كود QR الخاص بالعميل</Label>
-              <Input value={qrCode} onChange={(e) => setQrCode(e.target.value)} placeholder="JIWARv3..." dir="ltr" className="mt-1" />
+              <Label className="font-cairo">كود QR أو رقم حساب العميل</Label>
+              <Input
+                value={qrCode}
+                onChange={(e) => setQrCode(e.target.value)}
+                placeholder="رقم الحساب (10 أرقام) أو JIWARv3... / JIWARs1..."
+                dir="ltr"
+                className="mt-1"
+              />
             </div>
             <Button onClick={handleLookup} disabled={loading} className="w-full bg-gradient-primary text-primary-foreground">
               {loading ? "جارٍ البحث..." : "بحث عن العميل"}
@@ -301,9 +307,14 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
             <div className="bg-muted rounded-xl p-4 text-center">
               <p className="text-sm text-muted-foreground font-ibm">العميل</p>
               <p className="font-cairo font-bold text-foreground text-lg">{customerInfo?.full_name || "عميل"}</p>
+              {customerInfo?.account_number && (
+                <p dir="ltr" className="text-xs font-mono text-muted-foreground mt-1">
+                  رقم الحساب: <span className="font-bold text-primary">{customerInfo.account_number}</span>
+                </p>
+              )}
               <p className="text-sm text-primary font-ibm mt-1">الرصيد المتاح: {customerInfo?.available_balance} ر.س</p>
               {customerInfo?._dynamicToken && (
-                <p className="text-xs text-primary font-ibm mt-1">✓ كود ديناميكي آمن</p>
+                <p className="text-xs text-primary font-ibm mt-1">✓ كود آمن</p>
               )}
             </div>
             <div>
