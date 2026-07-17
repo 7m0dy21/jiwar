@@ -79,6 +79,7 @@ const FirebasePhase1 = () => {
           phone: d.phone ?? null,
           email: d.email ?? "",
           walletBalance: typeof d.wallet_balance === "number" ? d.wallet_balance : 0,
+          isVerified: d.is_verified === true,
           createdAt: d.created_at?.toMillis?.() ?? null,
         });
         setMerchant(null);
