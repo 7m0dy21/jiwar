@@ -89,6 +89,7 @@ export const ensureCustomerAccount = async (
       phone: input.phone,
       email: input.email,
       wallet_balance: STARTING_WALLET_BALANCE,
+      is_verified: false,
       created_at: serverTimestamp(),
     });
 
@@ -102,8 +103,14 @@ export const ensureCustomerAccount = async (
     phone: input.phone,
     email: input.email,
     walletBalance: STARTING_WALLET_BALANCE,
+    isVerified: false,
     createdAt: Date.now(),
   };
+};
+
+/** Admin/Nafath: mark a customer as verified. Rules require the customer to be signed in as themselves. */
+export const setCustomerVerified = async (uid: string, verified: boolean): Promise<void> => {
+  await updateDoc(doc(getDb(), "customers", uid), { is_verified: verified });
 };
 
 export const getCustomerByUid = async (
