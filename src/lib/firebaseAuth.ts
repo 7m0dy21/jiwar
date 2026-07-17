@@ -8,6 +8,9 @@ import {
 } from "firebase/auth";
 import { getFirebaseAuth } from "@/config/firebase";
 import { ensureCustomerAccount } from "./firebaseCustomers";
+import { ensureMerchantAccount } from "./firebaseMerchants";
+
+export type UserRole = "customer" | "merchant";
 
 export const signUpCustomer = async (
   email: string,
@@ -26,15 +29,36 @@ export const signUpCustomer = async (
   return { user: cred.user, account };
 };
 
-export const signInCustomer = async (email: string, password: string) => {
+export const signUpMerchant = async (
+  email: string,
+  password: string,
+  storeName: string,
+  phone?: string,
+) => {
+  const auth = getFirebaseAuth();
+  const cred = await createUserWithEmailAndPassword(auth, email, password);
+  if (storeName) await updateProfile(cred.user, { displayName: storeName });
+  const account = await ensureMerchantAccount(cred.user.uid, {
+    storeName,
+    phone: phone ?? null,
+    email,
+  });
+  return { user: cred.user, account };
+};
+
+export const signInEmail = async (email: string, password: string) => {
   const auth = getFirebaseAuth();
   const cred = await signInWithEmailAndPassword(auth, email, password);
   return cred.user;
 };
 
-export const signOutCustomer = async () => {
+export const signOutUser = async () => {
   await fbSignOut(getFirebaseAuth());
 };
 
 export const subscribeAuth = (cb: (user: User | null) => void) =>
   onAuthStateChanged(getFirebaseAuth(), cb);
+
+// Legacy alias for FirebasePhase1 page.
+export const signInCustomer = signInEmail;
+export const signOutCustomer = signOutUser;
