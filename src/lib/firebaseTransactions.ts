@@ -108,3 +108,27 @@ export const subscribeCustomerTransactions = (
   );
   return onSnapshot(q, (snap) => cb(snap.docs.map((d) => toRecord(d.id, d.data()))));
 };
+
+/** Real-time listener for pending transactions awaiting the customer's response. */
+export const subscribePendingForCustomer = (
+  customerUid: string,
+  cb: (list: TransactionRecord[]) => void,
+) => {
+  const q = query(
+    collection(getDb(), "transactions"),
+    where("customer_uid", "==", customerUid),
+    where("status", "==", "pending"),
+  );
+  return onSnapshot(q, (snap) => cb(snap.docs.map((d) => toRecord(d.id, d.data()))));
+};
+
+/** Customer responds to a pending transaction. Rules enforce ownership + immutable fields. */
+export const respondToTransaction = async (
+  txId: string,
+  approve: boolean,
+): Promise<void> => {
+  await updateDoc(doc(getDb(), "transactions", txId), {
+    status: approve ? "completed" : "declined",
+    responded_at: serverTimestamp(),
+  });
+};
