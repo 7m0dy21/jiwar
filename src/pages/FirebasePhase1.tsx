@@ -73,6 +73,25 @@ const FirebasePhase1 = () => {
     if (customer) return subscribeCustomerTransactions(uid, setTxs);
   }, [uid, customer, merchant]);
 
+  // Live balance updates for the signed-in profile.
+  useEffect(() => {
+    if (!uid) return;
+    if (customer) {
+      return onSnapshot(doc(getDb(), "customers", uid), (snap) => {
+        if (!snap.exists()) return;
+        const d = snap.data() as any;
+        setCustomer((prev) => (prev ? { ...prev, walletBalance: typeof d.wallet_balance === "number" ? d.wallet_balance : prev.walletBalance } : prev));
+      });
+    }
+    if (merchant) {
+      return onSnapshot(doc(getDb(), "merchants", uid), (snap) => {
+        if (!snap.exists()) return;
+        const d = snap.data() as any;
+        setMerchant((prev) => (prev ? { ...prev, walletBalance: typeof d.wallet_balance === "number" ? d.wallet_balance : prev.walletBalance } : prev));
+      });
+    }
+  }, [uid, customer?.uid, merchant?.uid]);
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); setLoading(true);
     try {
