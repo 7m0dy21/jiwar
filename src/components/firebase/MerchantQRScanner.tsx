@@ -50,7 +50,7 @@ const MerchantQRScanner = ({ onDetected }: Props) => {
       const s = scannerRef.current;
       scannerRef.current = null;
       if (s) {
-        s.stop().catch(() => {}).finally(() => s.clear().catch(() => {}));
+        s.stop().catch(() => {}).finally(() => { try { s.clear(); } catch { /* noop */ } });
       }
     };
   }, [open, onDetected]);
