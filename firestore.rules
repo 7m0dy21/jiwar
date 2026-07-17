@@ -4,12 +4,13 @@ service cloud.firestore {
 
     function isSignedIn() { return request.auth != null; }
     function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
-    function isAdmin() { return isSignedIn() && request.auth.token.role == 'admin'; }
+    function hasRole(r)  { return isSignedIn() && request.auth.token.role == r; }
+    function isAdmin()    { return hasRole('admin'); }
 
-    // A merchant is any signed-in user that owns a merchants/{uid} doc.
-    function isMerchant() {
-      return isSignedIn() && exists(/databases/$(database)/documents/merchants/$(request.auth.uid));
-    }
+    // A merchant is a signed-in user whose auth token carries role:'merchant'
+    // (set by the onMerchantCreated Cloud Function).
+    function isMerchant() { return hasRole('merchant'); }
+
     function merchantIdOf(uid) {
       return get(/databases/$(database)/documents/merchants/$(uid)).data.merchant_id;
     }
