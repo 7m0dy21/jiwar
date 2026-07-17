@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
-import { ShieldCheck, AlertTriangle, XCircle, Clock, CheckCircle2, Ban } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ShieldCheck, AlertTriangle, XCircle, Clock, CheckCircle2, Ban, Download } from "lucide-react";
+import { downloadCSV } from "@/lib/csv";
 
 interface Props {
   scope: "customer" | "merchant";
@@ -41,11 +43,29 @@ const QRAuditLog = ({ scope, entityId }: Props) => {
     return () => { supabase.removeChannel(ch); };
   }, [scope, entityId]);
 
+  const exportCSV = () => {
+    downloadCSV(
+      `qr-audit-${scope}-${new Date().toISOString().slice(0, 10)}.csv`,
+      ["التاريخ", "الحدث", "المبلغ", "السبب"],
+      rows.map((r) => [
+        new Date(r.created_at).toLocaleString("ar-SA"),
+        eventMeta[r.event_type]?.label || r.event_type,
+        r.amount != null ? Number(r.amount).toFixed(2) : "",
+        r.reason || "",
+      ])
+    );
+  };
+
   return (
     <div className="bg-card border border-border rounded-2xl p-6 shadow-card">
-      <div className="flex items-center gap-2 mb-4">
-        <ShieldCheck className="w-5 h-5 text-primary" />
-        <h2 className="font-cairo font-bold text-foreground text-lg">سجل تدقيق كود الدفع</h2>
+      <div className="flex items-center justify-between gap-2 mb-4">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="w-5 h-5 text-primary" />
+          <h2 className="font-cairo font-bold text-foreground text-lg">سجل تدقيق كود الدفع</h2>
+        </div>
+        <Button size="sm" variant="outline" onClick={exportCSV} disabled={!rows.length} className="gap-1 font-cairo">
+          <Download className="w-4 h-4" /> تصدير CSV
+        </Button>
       </div>
       {loading ? (
         <p className="text-sm text-muted-foreground font-ibm">جارٍ التحميل...</p>
