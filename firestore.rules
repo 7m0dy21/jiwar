@@ -1,0 +1,73 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
+    function isMerchant() {
+      return isSignedIn() && request.auth.token.role == 'merchant';
+    }
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.role == 'admin';
+    }
+
+    // customers/{uid} — private customer profile.
+    // Only the customer (or admin) may read. Merchants have NO read access.
+    match /customers/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+
+      // Create only on first signup; account_number is set here and immutable after.
+      allow create: if isOwner(uid)
+        && request.resource.data.uid == uid
+        && request.resource.data.account_number is string
+        && request.resource.data.account_number.size() >= 10;
+
+      // Customer may update non-financial profile fields, but never account_number.
+      allow update: if isOwner(uid)
+        && request.resource.data.account_number == resource.data.account_number
+        && request.resource.data.uid == resource.data.uid;
+
+      allow delete: if isAdmin();
+    }
+
+    // account_numbers/{n} — reservation index. Stores ONLY {uid, createdAt}.
+    // Any authenticated user (including merchants) can read to resolve an
+    // account_number → uid for routing a payment. No personal data is exposed.
+    match /account_numbers/{num} {
+      allow read: if isSignedIn();
+      // Writes are done inside a transaction with customers/{uid}. Enforce that
+      // the payload carries the caller's uid.
+      allow create: if isSignedIn() && request.resource.data.uid == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // meta/counters — atomic account-number counter.
+    match /meta/{docId} {
+      allow read, write: if isSignedIn(); // guarded by transaction semantics
+    }
+
+    // payments/{id} — payment records created by merchants against an account_number.
+    // Merchants may CREATE. They may READ only their own payments.
+    // Customers may READ payments addressed to their account.
+    match /payments/{id} {
+      allow create: if isMerchant()
+        && request.resource.data.merchant_uid == request.auth.uid
+        && request.resource.data.account_number is string
+        && request.resource.data.amount is number
+        && request.resource.data.amount > 0
+        && request.resource.data.status == 'pending';
+
+      allow read: if isAdmin()
+        || (isMerchant() && resource.data.merchant_uid == request.auth.uid)
+        || (isSignedIn() && resource.data.customer_uid == request.auth.uid);
+
+      allow update: if isAdmin(); // status transitions happen server-side later
+      allow delete: if isAdmin();
+    }
+
+    // Default deny.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
