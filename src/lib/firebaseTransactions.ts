@@ -5,6 +5,7 @@ import {
   onSnapshot,
   orderBy,
   query,
+  runTransaction,
   serverTimestamp,
   updateDoc,
   where,
@@ -27,7 +28,6 @@ export interface TransactionRecord {
   created_at: number | null;
 }
 
-
 /**
  * Merchant-initiated payment: resolves account_number → customer uid via the
  * public reservation index (which contains only the uid — no personal data),
@@ -49,7 +49,6 @@ export const createMerchantTransaction = async (
   if (!merchant) {
     throw new Error("حساب التاجر غير موجود - لا تملك صلاحية إنشاء عمليات دفع");
   }
-
 
   const resolved = await resolveAccountNumber(accountNumber);
   if (!resolved) throw new Error("رقم الحساب غير موجود");
@@ -114,13 +113,68 @@ export const subscribePendingForCustomer = (
   return onSnapshot(q, (snap) => cb(snap.docs.map((d) => toRecord(d.id, d.data()))));
 };
 
-/** Customer responds to a pending transaction. Rules enforce ownership + immutable fields. */
+export class InsufficientFundsError extends Error {
+  constructor() {
+    super("الرصيد غير كافٍ");
+    this.name = "InsufficientFundsError";
+  }
+}
+
+/**
+ * Customer approves a pending transaction: atomically deducts from the
+ * customer's wallet, credits the merchant's wallet, and marks the tx completed.
+ * Throws InsufficientFundsError if the customer's balance is below the amount.
+ */
+export const approveTransactionAtomic = async (
+  txId: string,
+  customerUid: string,
+): Promise<void> => {
+  const db = getDb();
+  await runTransaction(db, async (tx) => {
+    const txRef = doc(db, "transactions", txId);
+    const txSnap = await tx.get(txRef);
+    if (!txSnap.exists()) throw new Error("العملية غير موجودة");
+    const txData = txSnap.data() as any;
+    if (txData.status !== "pending") throw new Error("لم تعد العملية بانتظار الموافقة");
+    if (txData.customer_uid !== customerUid) throw new Error("غير مصرح");
+
+    const amount = Number(txData.amount) || 0;
+    const customerRef = doc(db, "customers", customerUid);
+    const merchantRef = doc(db, "merchants", txData.merchant_uid);
+
+    const [cSnap, mSnap] = await Promise.all([tx.get(customerRef), tx.get(merchantRef)]);
+    if (!cSnap.exists()) throw new Error("حساب العميل غير موجود");
+    if (!mSnap.exists()) throw new Error("حساب التاجر غير موجود");
+
+    const customerBalance = Number((cSnap.data() as any).wallet_balance) || 0;
+    const merchantBalance = Number((mSnap.data() as any).wallet_balance) || 0;
+
+    if (customerBalance < amount) throw new InsufficientFundsError();
+
+    tx.update(customerRef, { wallet_balance: customerBalance - amount });
+    tx.update(merchantRef, { wallet_balance: merchantBalance + amount });
+    tx.update(txRef, { status: "completed", responded_at: serverTimestamp() });
+  });
+};
+
+/** Customer declines a pending transaction (no balance changes). */
+export const declineTransaction = async (txId: string): Promise<void> => {
+  await updateDoc(doc(getDb(), "transactions", txId), {
+    status: "declined",
+    responded_at: serverTimestamp(),
+  });
+};
+
+/** @deprecated use approveTransactionAtomic / declineTransaction */
 export const respondToTransaction = async (
   txId: string,
   approve: boolean,
+  customerUid?: string,
 ): Promise<void> => {
-  await updateDoc(doc(getDb(), "transactions", txId), {
-    status: approve ? "completed" : "declined",
-    responded_at: serverTimestamp(),
-  });
+  if (approve) {
+    if (!customerUid) throw new Error("customerUid required for approval");
+    await approveTransactionAtomic(txId, customerUid);
+  } else {
+    await declineTransaction(txId);
+  }
 };

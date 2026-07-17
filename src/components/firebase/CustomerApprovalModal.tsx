@@ -4,16 +4,19 @@ import { Button } from "@/components/ui/button";
 import { Check, X } from "lucide-react";
 import { toast } from "sonner";
 import {
-  respondToTransaction,
+  approveTransactionAtomic,
+  declineTransaction,
+  InsufficientFundsError,
   subscribePendingForCustomer,
   type TransactionRecord,
 } from "@/lib/firebaseTransactions";
 
 interface Props {
   customerUid: string;
+  walletBalance: number;
 }
 
-const CustomerApprovalModal = ({ customerUid }: Props) => {
+const CustomerApprovalModal = ({ customerUid, walletBalance }: Props) => {
   const [pending, setPending] = useState<TransactionRecord[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -22,15 +25,32 @@ const CustomerApprovalModal = ({ customerUid }: Props) => {
     return subscribePendingForCustomer(customerUid, setPending);
   }, [customerUid]);
 
-  // Show the oldest pending first, one at a time.
   const current = [...pending].sort((a, b) => (a.created_at ?? 0) - (b.created_at ?? 0))[0];
 
-  const respond = async (approve: boolean) => {
+  const approve = async () => {
+    if (!current) return;
+    if (walletBalance < current.amount) {
+      toast.error("الرصيد غير كافٍ لإتمام العملية");
+      return;
+    }
+    setLoading(true);
+    try {
+      await approveTransactionAtomic(current.id, customerUid);
+      toast.success("تمت الموافقة على الدفع");
+    } catch (e: any) {
+      if (e instanceof InsufficientFundsError) toast.error("الرصيد غير كافٍ لإتمام العملية");
+      else toast.error(e?.message || "فشل الرد");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const decline = async () => {
     if (!current) return;
     setLoading(true);
     try {
-      await respondToTransaction(current.id, approve);
-      toast.success(approve ? "تمت الموافقة على الدفع" : "تم رفض الطلب");
+      await declineTransaction(current.id);
+      toast.success("تم رفض الطلب");
     } catch (e: any) {
       toast.error(e?.message || "فشل الرد");
     } finally {
@@ -39,9 +59,10 @@ const CustomerApprovalModal = ({ customerUid }: Props) => {
   };
 
   if (!current) return null;
+  const insufficient = walletBalance < current.amount;
 
   return (
-    <Dialog open onOpenChange={(v) => { if (!v) respond(false); }}>
+    <Dialog open onOpenChange={(v) => { if (!v) decline(); }}>
       <DialogContent className="max-w-sm text-center">
         <DialogHeader>
           <DialogTitle className="font-bold text-xl">طلب دفع جديد</DialogTitle>
@@ -55,12 +76,18 @@ const CustomerApprovalModal = ({ customerUid }: Props) => {
               {current.amount.toFixed(2)} <span className="text-lg">ر.س</span>
             </p>
           </div>
-          <p className="text-xs text-muted-foreground">راجع المبلغ قبل الموافقة</p>
+          <div className="text-sm">
+            <span className="text-muted-foreground">رصيدك الحالي: </span>
+            <span className="font-semibold" dir="ltr">{walletBalance.toFixed(2)} ر.س</span>
+          </div>
+          {insufficient && (
+            <p className="text-sm text-destructive font-semibold">الرصيد غير كافٍ لإتمام العملية</p>
+          )}
           <div className="grid grid-cols-2 gap-3">
-            <Button onClick={() => respond(false)} disabled={loading} variant="outline" className="gap-2 border-destructive/40 text-destructive">
+            <Button onClick={decline} disabled={loading} variant="outline" className="gap-2 border-destructive/40 text-destructive">
               <X className="w-4 h-4" /> رفض
             </Button>
-            <Button onClick={() => respond(true)} disabled={loading} className="gap-2">
+            <Button onClick={approve} disabled={loading || insufficient} className="gap-2">
               <Check className="w-4 h-4" /> موافقة
             </Button>
           </div>
