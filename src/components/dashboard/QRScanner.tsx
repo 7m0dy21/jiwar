@@ -135,10 +135,13 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
         toast.error("الكود قديم - اطلب من العميل إغلاق نافذة QR وفتحها مرة أخرى لتوليد كود جديد");
         return;
       }
-      const check = validateJiwarV3(dynamicToken);
-      if (check.ok !== true) {
-        toast.error(check.reason);
-        return;
+      const isStatic = dynamicToken.startsWith("JIWARs1.") || /^\d{6,20}$/.test(dynamicToken);
+      if (!isStatic) {
+        const check = validateJiwarV3(dynamicToken);
+        if (check.ok !== true) {
+          toast.error(check.reason);
+          return;
+        }
       }
       const { data, error } = await supabase.functions.invoke("qr-pay", {
         body: { action: "lookup", token: dynamicToken },
@@ -147,7 +150,9 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
         toast.error(data?.error || error?.message || "تعذر التعرف على العميل");
         return;
       }
-      setCustomerInfo({ ...data.customer, _dynamicToken: dynamicToken });
+      // Use the server-normalized token (important when merchant entered a bare account number)
+      const resolvedToken = data.token || dynamicToken;
+      setCustomerInfo({ ...data.customer, _dynamicToken: resolvedToken });
       if (data.customer?.verification_reason) {
         setFailureReason(data.customer.verification_reason);
       }
