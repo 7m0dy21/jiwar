@@ -199,9 +199,12 @@ const FirebasePhase1 = () => {
           <Card>
             <CardHeader><CardTitle>رقم الحساب الثابت</CardTitle></CardHeader>
             <CardContent className="space-y-4 text-center">
-              <div className="bg-white p-4 rounded-2xl inline-block">
-                <QRCodeSVG value={customer.accountNumber} size={240} level="M" marginSize={2} />
+              <div className="bg-white p-4 rounded-2xl inline-block min-h-[272px] min-w-[272px] flex items-center justify-center">
+                {customer.accountNumber
+                  ? <QRCodeSVG value={customer.accountNumber} size={240} level="M" marginSize={2} />
+                  : <span className="text-muted-foreground text-sm">جارٍ تحميل رقم الحساب...</span>}
               </div>
+
               <div>
                 <p className="text-xs text-muted-foreground mb-1">رقم حسابك (فريد ودائم)</p>
                 <div className="flex items-center justify-center gap-2">
