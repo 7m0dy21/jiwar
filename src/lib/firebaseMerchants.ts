@@ -70,6 +70,7 @@ export const ensureMerchantAccount = async (
       phone: input.phone,
       email: input.email,
       wallet_balance: MERCHANT_STARTING_BALANCE,
+      is_verified: false,
       created_at: serverTimestamp(),
     });
 
