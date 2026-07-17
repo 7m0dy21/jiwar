@@ -1,16 +1,20 @@
 import {
   addDoc,
   collection,
+  doc,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
+  updateDoc,
   where,
   type Timestamp,
 } from "firebase/firestore";
 import { getDb } from "@/config/firebase";
 import { resolveAccountNumber } from "./firebaseCustomers";
 import { getMerchantByUid } from "./firebaseMerchants";
+
+export type TransactionStatus = "pending" | "completed" | "declined" | "failed";
 
 export interface TransactionRecord {
   id: string;
@@ -19,9 +23,10 @@ export interface TransactionRecord {
   merchant_uid: string;
   merchant_id: string;
   amount: number;
-  status: "pending" | "approved" | "rejected" | "failed";
+  status: TransactionStatus;
   created_at: number | null;
 }
+
 
 /**
  * Merchant-initiated payment: resolves account_number → customer uid via the
