@@ -85,14 +85,19 @@ const CustomerApprovalModal = ({ customerUid, walletBalance, isVerified }: Props
             <span className="text-muted-foreground">رصيدك الحالي: </span>
             <span className="font-semibold" dir="ltr">{walletBalance.toFixed(2)} ر.س</span>
           </div>
-          {insufficient && (
+          {!isVerified && (
+            <p className="text-sm text-destructive font-semibold">
+              تم التعرف على العميل، لكنه لم يكمل التحقق بعد
+            </p>
+          )}
+          {isVerified && insufficient && (
             <p className="text-sm text-destructive font-semibold">الرصيد غير كافٍ لإتمام العملية</p>
           )}
           <div className="grid grid-cols-2 gap-3">
             <Button onClick={decline} disabled={loading} variant="outline" className="gap-2 border-destructive/40 text-destructive">
               <X className="w-4 h-4" /> رفض
             </Button>
-            <Button onClick={approve} disabled={loading || insufficient} className="gap-2">
+            <Button onClick={approve} disabled={loading || insufficient || !isVerified} className="gap-2">
               <Check className="w-4 h-4" /> موافقة
             </Button>
           </div>
