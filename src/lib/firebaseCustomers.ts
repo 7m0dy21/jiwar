@@ -16,8 +16,10 @@ export interface CustomerAccount {
   phone: string | null;
   email: string;
   walletBalance: number;
+  isVerified: boolean;
   createdAt: number | null;
 }
+
 
 export interface CreateCustomerInput {
   fullName: string;
