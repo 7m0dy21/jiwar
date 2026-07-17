@@ -12,11 +12,32 @@ interface DynamicQRProps {
 
 const DynamicQR = ({ customerName }: DynamicQRProps) => {
   const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<"dynamic" | "static">("dynamic");
   const [token, setToken] = useState<string>("");
   const [expiresAt, setExpiresAt] = useState<number>(0);
   const [remaining, setRemaining] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string>("");
+  const [staticToken, setStaticToken] = useState<string>("");
+  const [accountNumber, setAccountNumber] = useState<string>("");
+  const [staticError, setStaticError] = useState<string>("");
+
+  const readServerError = async (error: any, data: any) => {
+    let serverMsg: string | null = null;
+    if (error) {
+      const ctx: any = (error as any).context;
+      try {
+        if (ctx && typeof ctx.json === "function") {
+          const j = await ctx.json();
+          serverMsg = j?.error || null;
+        } else if (ctx && typeof ctx.text === "function") {
+          const t = await ctx.text();
+          try { serverMsg = JSON.parse(t)?.error || t; } catch { serverMsg = t; }
+        }
+      } catch {}
+    }
+    return serverMsg || data?.error || error?.message || "";
+  };
 
   const generate = useCallback(async () => {
     setLoading(true);
@@ -25,29 +46,13 @@ const DynamicQR = ({ customerName }: DynamicQRProps) => {
       const { data, error } = await supabase.functions.invoke("qr-pay", {
         body: { action: "generate" },
       });
-
-      // Extract server-side error message even when HTTP status != 2xx
-      let serverMsg: string | null = null;
-      if (error) {
-        const ctx: any = (error as any).context;
-        try {
-          if (ctx && typeof ctx.json === "function") {
-            const j = await ctx.json();
-            serverMsg = j?.error || null;
-          } else if (ctx && typeof ctx.text === "function") {
-            const t = await ctx.text();
-            try { serverMsg = JSON.parse(t)?.error || t; } catch { serverMsg = t; }
-          }
-        } catch { /* ignore */ }
-      }
-
+      const serverMsg = await readServerError(error, data);
       if (error || !data?.token) {
-        const msg = serverMsg || data?.error || error?.message || "تعذر توليد الكود";
+        const msg = serverMsg || "تعذر توليد الكود";
         setErrorMsg(msg);
         toast.error(msg);
         return;
       }
-
       setToken(data.token);
       setExpiresAt(data.expires_at);
     } catch (e: any) {
@@ -56,6 +61,24 @@ const DynamicQR = ({ customerName }: DynamicQRProps) => {
       toast.error(msg);
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  const generateStatic = useCallback(async () => {
+    setStaticError("");
+    try {
+      const { data, error } = await supabase.functions.invoke("qr-pay", {
+        body: { action: "generate_static" },
+      });
+      const serverMsg = await readServerError(error, data);
+      if (error || !data?.token) {
+        setStaticError(serverMsg || "تعذر توليد الكود الثابت");
+        return;
+      }
+      setStaticToken(data.token);
+      setAccountNumber(data.account_number || "");
+    } catch (e: any) {
+      setStaticError(e?.message || "تعذر الاتصال بالخادم");
     }
   }, []);
 
