@@ -91,6 +91,7 @@ export type Database = {
       }
       customers: {
         Row: {
+          account_number: string
           available_balance: number
           created_at: string
           credit_limit: number
@@ -105,6 +106,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          account_number?: string
           available_balance?: number
           created_at?: string
           credit_limit?: number
@@ -119,6 +121,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          account_number?: string
           available_balance?: number
           created_at?: string
           credit_limit?: number

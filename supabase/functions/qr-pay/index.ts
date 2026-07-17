@@ -4,9 +4,10 @@ import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 const TTL_SECONDS = 60;
 
 type ParsedQrToken = {
-  version: "v2" | "v3";
+  version: "v2" | "v3" | "s1";
   customerId: string;
   customerUserId: string | null;
+  accountNumber: string | null;
   timestamp: number;
   signature: string;
   signedPayload: string;
@@ -63,6 +64,19 @@ function normalizeQrToken(input: string): string {
 function parseQrToken(token: string): ParsedQrToken {
   const cleaned = normalizeQrToken(token);
   const parts = cleaned.split(".");
+  if (/^JIWARs1$/i.test(parts[0])) {
+    const [, accountNumber, signature] = parts;
+    if (!accountNumber || !/^\d{6,20}$/.test(accountNumber) || !signature) throw new Error("كود غير صالح");
+    return {
+      version: "s1",
+      customerId: "",
+      customerUserId: null,
+      accountNumber,
+      timestamp: 0,
+      signature,
+      signedPayload: `s1.${accountNumber}`,
+    };
+  }
   if (/^JIWARv3$/i.test(parts[0])) {
     const [, compactCustomerId, compactCustomerUserId, ts36, signature] = parts;
     const timestamp = parseInt(ts36, 36);
@@ -71,6 +85,7 @@ function parseQrToken(token: string): ParsedQrToken {
       version: "v3",
       customerId: compactToUuid(compactCustomerId),
       customerUserId: compactToUuid(compactCustomerUserId),
+      accountNumber: null,
       timestamp,
       signature,
       signedPayload: `${compactCustomerId.toLowerCase()}.${compactCustomerUserId.toLowerCase()}.${ts36.toLowerCase()}`,
@@ -87,6 +102,7 @@ function parseQrToken(token: string): ParsedQrToken {
       version: "v2",
       customerId,
       customerUserId: null,
+      accountNumber: null,
       timestamp,
       signature,
       signedPayload: `${customerId}.${timestamp}`,
@@ -101,6 +117,7 @@ function parseQrToken(token: string): ParsedQrToken {
       version: "v2",
       customerId,
       customerUserId,
+      accountNumber: null,
       timestamp,
       signature,
       signedPayload: `${customerId}.${customerUserId}.${timestamp}`,
@@ -140,15 +157,25 @@ async function hmacSignCompact(message: string, secret: string): Promise<string>
 }
 
 async function expectedSignature(parsed: ParsedQrToken, secret: string): Promise<string> {
-  return parsed.version === "v3"
-    ? hmacSignCompact(parsed.signedPayload, secret)
-    : hmacSign(parsed.signedPayload, secret);
+  if (parsed.version === "v3") return hmacSignCompact(parsed.signedPayload, secret);
+  if (parsed.version === "s1") return hmacSignCompact(parsed.signedPayload, secret);
+  return hmacSign(parsed.signedPayload, secret);
 }
 
 async function resolveCustomer(admin: ReturnType<typeof createClient>, parsed: ParsedQrToken) {
+  if (parsed.version === "s1" && parsed.accountNumber) {
+    const { data: byAcct, error: acctErr } = await admin
+      .from("customers")
+      .select("id, available_balance, credit_limit, user_id, onboarding_completed, account_number")
+      .eq("account_number", parsed.accountNumber)
+      .maybeSingle();
+    if (acctErr) return { customer: null, error: acctErr.message, relinked: false };
+    return { customer: byAcct, error: null, relinked: false };
+  }
+
   const { data: byId, error: byIdError } = await admin
     .from("customers")
-    .select("id, available_balance, credit_limit, user_id, onboarding_completed")
+    .select("id, available_balance, credit_limit, user_id, onboarding_completed, account_number")
     .eq("id", parsed.customerId)
     .maybeSingle();
 
@@ -159,7 +186,7 @@ async function resolveCustomer(admin: ReturnType<typeof createClient>, parsed: P
 
   const { data: byUser, error: byUserError } = await admin
     .from("customers")
-    .select("id, available_balance, credit_limit, user_id, onboarding_completed")
+    .select("id, available_balance, credit_limit, user_id, onboarding_completed, account_number")
     .eq("user_id", parsed.customerUserId)
     .maybeSingle();
 
@@ -216,9 +243,31 @@ Deno.serve(async (req) => {
       return jsonResponse({ token, ttl: TTL_SECONDS, expires_at: ts + TTL_SECONDS });
     }
 
+    if (action === "generate_static") {
+      const { data: customer } = await admin
+        .from("customers")
+        .select("id, user_id, account_number")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (!customer) return jsonResponse({ error: "ليس لديك حساب عميل" }, 400);
+      if (!customer.account_number) return jsonResponse({ error: "رقم الحساب غير متوفر" }, 400);
+      const payload = `s1.${customer.account_number}`;
+      const sig = await hmacSignCompact(payload, SECRET);
+      const token = `JIWARs1.${customer.account_number}.${sig}`;
+      await logAudit(customer.id, null, "generated_static", null, "تم توليد الكود الثابت", { account_number: customer.account_number });
+      return jsonResponse({ token, account_number: customer.account_number });
+    }
+
     if (action === "lookup") {
-      const { token } = body;
-      if (!token || typeof token !== "string") throw new Error("token مطلوب");
+      const { token: rawToken } = body;
+      if (!rawToken || typeof rawToken !== "string") throw new Error("token مطلوب");
+      // Allow merchant to enter just the account number (digits only) — auto-wrap as static token
+      let token = rawToken.trim();
+      if (/^\d{6,20}$/.test(token)) {
+        if (!SECRET) throw new Error("JIWAR_QR_SECRET missing");
+        const sig = await hmacSignCompact(`s1.${token}`, SECRET);
+        token = `JIWARs1.${token}.${sig}`;
+      }
       let parsed: ParsedQrToken;
       try {
         parsed = parseQrToken(token);
@@ -229,7 +278,7 @@ Deno.serve(async (req) => {
       const { data: mer } = await admin.from("merchants").select("id").eq("user_id", userId).maybeSingle();
       if (!mer) throw new Error("حساب التاجر غير موجود - سجّل دخول من حساب تاجر");
       const now = Math.floor(Date.now() / 1000);
-      if (now - parsed.timestamp > TTL_SECONDS) {
+      if (parsed.version !== "s1" && now - parsed.timestamp > TTL_SECONDS) {
         await logAudit(parsed.customerId, mer.id, "expired", null, "انتهت صلاحية الكود (lookup)");
         throw new Error("انتهت صلاحية الكود - اطلب من العميل تحديثه");
       }
@@ -244,7 +293,7 @@ Deno.serve(async (req) => {
         throw new Error("تعذر قراءة بيانات العميل");
       }
       if (!cust) {
-        await logAudit(parsed.customerId, mer.id, "customer_not_found", null, "معرّف العميل في الكود غير موجود");
+        await logAudit(parsed.customerId || null, mer.id, "customer_not_found", null, "معرّف العميل في الكود غير موجود");
         throw new Error("العميل غير موجود - قد يكون الكود قديماً أو الحساب محذوفاً");
       }
       if (relinked) {
@@ -256,28 +305,38 @@ Deno.serve(async (req) => {
         await logAudit(cust.id, mer.id, "onboarding_incomplete", null, "تم التعرف على العميل لكن لم يكمل التحقق");
       }
       return jsonResponse({
+        token,
         customer: {
           id: cust.id,
           user_id: cust.user_id,
           full_name: profile?.full_name || "عميل",
           phone: profile?.phone || null,
+          account_number: (cust as any).account_number || null,
           available_balance: cust.available_balance,
           credit_limit: cust.credit_limit,
           can_pay: canPay,
           verification_reason: canPay ? null : "تم التعرف على العميل، لكنه لم يكمل التحقق (نفاذ/سمة/نافذ) بعد",
         },
-        expires_at: parsed.timestamp + TTL_SECONDS,
+        expires_at: parsed.version === "s1" ? null : parsed.timestamp + TTL_SECONDS,
+        static: parsed.version === "s1",
       });
     }
 
     if (action === "pay") {
-      const { token, amount } = body;
+      const { token: rawToken, amount } = body;
       const numAmount = Number(amount);
-      if (!token || typeof token !== "string") {
+      if (!rawToken || typeof rawToken !== "string") {
         await logAudit(null, null, "invalid_signature", numAmount || null, "كود مفقود");
         throw new Error("token مطلوب");
       }
       if (!numAmount || numAmount <= 0) throw new Error("المبلغ غير صالح");
+
+      // Allow bare account number for static payments
+      let token = rawToken.trim();
+      if (/^\d{6,20}$/.test(token)) {
+        const sig = await hmacSignCompact(`s1.${token}`, SECRET);
+        token = `JIWARs1.${token}.${sig}`;
+      }
 
       let parsed: ParsedQrToken;
       try {
@@ -292,7 +351,7 @@ Deno.serve(async (req) => {
       const merchantId = mer?.id || null;
 
       const now = Math.floor(Date.now() / 1000);
-      if (now - parsed.timestamp > TTL_SECONDS) {
+      if (parsed.version !== "s1" && now - parsed.timestamp > TTL_SECONDS) {
         await logAudit(parsed.customerId, merchantId, "expired", numAmount, "انتهت صلاحية الكود");
         // Notify customer
         const { customer: cust } = await resolveCustomer(admin, parsed);

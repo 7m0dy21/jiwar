@@ -44,11 +44,17 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
       }
     } catch {}
     s = decodeURIComponent(s).replace(/\s+/g, "");
+    const s1 = s.match(/JIWARs1\.\d{6,20}\.[A-Za-z0-9_-]{20,64}/i);
+    if (s1) return s1[0].replace(/^jiwars1/i, "JIWARs1");
     const v3 = s.match(/JIWARv3\.[0-9a-f]{32}\.[0-9a-f]{32}\.[0-9a-z]+\.[A-Za-z0-9_-]{20,64}/i);
     if (v3) return v3[0].replace(/^jiwarv3/i, "JIWARv3");
 
     const v2 = s.match(/JIWARv2\.[A-Fa-f0-9-]{36}(?:\.[A-Fa-f0-9-]{36})?\.\d+\.[A-Fa-f0-9]{64}/i);
-    return v2 ? v2[0].replace(/^jiwarv2/i, "JIWARv2") : null;
+    if (v2) return v2[0].replace(/^jiwarv2/i, "JIWARv2");
+
+    // Bare account number (10 digits typical)
+    const acct = s.match(/^\d{6,20}$/);
+    return acct ? acct[0] : null;
   };
 
   // Strict client-side pre-validation of a JIWARv3 token structure.
@@ -129,10 +135,13 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
         toast.error("الكود قديم - اطلب من العميل إغلاق نافذة QR وفتحها مرة أخرى لتوليد كود جديد");
         return;
       }
-      const check = validateJiwarV3(dynamicToken);
-      if (check.ok !== true) {
-        toast.error(check.reason);
-        return;
+      const isStatic = dynamicToken.startsWith("JIWARs1.") || /^\d{6,20}$/.test(dynamicToken);
+      if (!isStatic) {
+        const check = validateJiwarV3(dynamicToken);
+        if (check.ok !== true) {
+          toast.error(check.reason);
+          return;
+        }
       }
       const { data, error } = await supabase.functions.invoke("qr-pay", {
         body: { action: "lookup", token: dynamicToken },
@@ -141,7 +150,9 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
         toast.error(data?.error || error?.message || "تعذر التعرف على العميل");
         return;
       }
-      setCustomerInfo({ ...data.customer, _dynamicToken: dynamicToken });
+      // Use the server-normalized token (important when merchant entered a bare account number)
+      const resolvedToken = data.token || dynamicToken;
+      setCustomerInfo({ ...data.customer, _dynamicToken: resolvedToken });
       if (data.customer?.verification_reason) {
         setFailureReason(data.customer.verification_reason);
       }
@@ -278,8 +289,14 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
             </div>
 
             <div>
-              <Label className="font-cairo">كود QR الخاص بالعميل</Label>
-              <Input value={qrCode} onChange={(e) => setQrCode(e.target.value)} placeholder="JIWARv3..." dir="ltr" className="mt-1" />
+              <Label className="font-cairo">كود QR أو رقم حساب العميل</Label>
+              <Input
+                value={qrCode}
+                onChange={(e) => setQrCode(e.target.value)}
+                placeholder="رقم الحساب (10 أرقام) أو JIWARv3... / JIWARs1..."
+                dir="ltr"
+                className="mt-1"
+              />
             </div>
             <Button onClick={handleLookup} disabled={loading} className="w-full bg-gradient-primary text-primary-foreground">
               {loading ? "جارٍ البحث..." : "بحث عن العميل"}
@@ -290,9 +307,14 @@ const QRScanner = ({ merchantId, onSuccess }: QRScannerProps) => {
             <div className="bg-muted rounded-xl p-4 text-center">
               <p className="text-sm text-muted-foreground font-ibm">العميل</p>
               <p className="font-cairo font-bold text-foreground text-lg">{customerInfo?.full_name || "عميل"}</p>
+              {customerInfo?.account_number && (
+                <p dir="ltr" className="text-xs font-mono text-muted-foreground mt-1">
+                  رقم الحساب: <span className="font-bold text-primary">{customerInfo.account_number}</span>
+                </p>
+              )}
               <p className="text-sm text-primary font-ibm mt-1">الرصيد المتاح: {customerInfo?.available_balance} ر.س</p>
               {customerInfo?._dynamicToken && (
-                <p className="text-xs text-primary font-ibm mt-1">✓ كود ديناميكي آمن</p>
+                <p className="text-xs text-primary font-ibm mt-1">✓ كود آمن</p>
               )}
             </div>
             <div>
