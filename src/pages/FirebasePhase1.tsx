@@ -24,6 +24,8 @@ import {
   type TransactionRecord,
 } from "@/lib/firebaseTransactions";
 import { isFirebaseConfigured } from "@/config/firebase";
+import MerchantQRScanner from "@/components/firebase/MerchantQRScanner";
+import CustomerApprovalModal from "@/components/firebase/CustomerApprovalModal";
 
 type Mode = "signin" | "signup";
 
