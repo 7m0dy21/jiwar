@@ -12,6 +12,29 @@ import { ensureMerchantAccount } from "./firebaseMerchants";
 
 export type UserRole = "customer" | "merchant";
 
+/**
+ * Custom claims (role) are set asynchronously by a Cloud Function that fires
+ * on customers/{uid} or merchants/{uid} creation. This helper polls the ID
+ * token until the expected role appears (or times out) so that the very next
+ * Firestore write — which the rules now gate on request.auth.token.role —
+ * won't be rejected as "permission-denied".
+ */
+export const waitForRoleClaim = async (
+  role: UserRole,
+  { timeoutMs = 15000, intervalMs = 1000 }: { timeoutMs?: number; intervalMs?: number } = {},
+): Promise<boolean> => {
+  const auth = getFirebaseAuth();
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const user = auth.currentUser;
+    if (!user) return false;
+    const token = await user.getIdTokenResult(true);
+    if ((token.claims as any).role === role) return true;
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  return false;
+};
+
 export const signUpCustomer = async (
   email: string,
   password: string,
