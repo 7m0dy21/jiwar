@@ -40,6 +40,17 @@ export const createMerchantTransaction = async (
     throw new Error("المبلغ يجب أن يكون أكبر من صفر");
   }
 
+  // Defense-in-depth: verify the caller's custom claim before we even try to
+  // write. Firestore rules enforce role == 'merchant' server-side; this just
+  // gives a clearer error than "permission-denied".
+  const { getFirebaseAuth } = await import("@/config/firebase");
+  const authUser = getFirebaseAuth().currentUser;
+  if (!authUser) throw new Error("يجب تسجيل الدخول");
+  const token = await authUser.getIdTokenResult();
+  if ((token.claims as any).role !== "merchant") {
+    throw new Error("صلاحية التاجر غير مفعّلة بعد. أعد تسجيل الدخول.");
+  }
+
   const merchant = await getMerchantByUid(merchantUid);
   if (!merchant) throw new Error("حساب التاجر غير موجود");
 
