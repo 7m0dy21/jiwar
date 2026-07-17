@@ -14,6 +14,7 @@ import NearbyMerchants from "./NearbyMerchants";
 import QRAuditLog from "./QRAuditLog";
 import PaymentApprovals from "./PaymentApprovals";
 import NotificationSettings from "./NotificationSettings";
+import AccountInfoCard from "./AccountInfoCard";
 
 const CustomerDashboard = () => {
   const { user, signOut } = useAuth();
@@ -112,6 +113,17 @@ const CustomerDashboard = () => {
         {customer && (
           <div className="mb-8">
             <PaymentDialog customerId={customer.id} owedAmount={limit - available} onSuccess={reload} />
+          </div>
+        )}
+
+        {customer && user && (
+          <div className="mb-8">
+            <AccountInfoCard
+              accountNumber={customer.account_number}
+              linkedAt={customer.created_at}
+              customerId={customer.id}
+              userId={user.id}
+            />
           </div>
         )}
 
