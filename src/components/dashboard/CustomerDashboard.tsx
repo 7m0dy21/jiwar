@@ -14,6 +14,7 @@ import NearbyMerchants from "./NearbyMerchants";
 import QRAuditLog from "./QRAuditLog";
 import PaymentApprovals from "./PaymentApprovals";
 import NotificationSettings from "./NotificationSettings";
+import AccountInfoCard from "./AccountInfoCard";
 
 const CustomerDashboard = () => {
   const { user, signOut } = useAuth();
