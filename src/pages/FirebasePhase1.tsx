@@ -12,9 +12,9 @@ import {
   signInEmail,
   signOutUser,
   subscribeAuth,
-  waitForRoleClaim,
   type UserRole,
 } from "@/lib/firebaseAuth";
+
 import { getCustomerByUid, type CustomerAccount } from "@/lib/firebaseCustomers";
 import { getMerchantByUid, type MerchantAccount } from "@/lib/firebaseMerchants";
 import {
