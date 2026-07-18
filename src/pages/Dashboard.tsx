@@ -281,71 +281,72 @@ const Dashboard = () => {
         <div className="max-w-3xl mx-auto space-y-5">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-cairo font-bold flex items-center gap-2"><Store className="w-6 h-6" />{merchant.storeName || "متجري"}</h1>
+              <h1 className="text-2xl font-cairo font-bold flex items-center gap-2"><Store className="w-6 h-6" />{merchant.storeName || t("merchant.myStore")}</h1>
               <div className="flex items-center gap-2 mt-1">
-                <p className="text-xs text-muted-foreground">المعرف: <span dir="ltr" className="font-mono">{merchant.merchantId}</span></p>
+                <p className="text-xs text-muted-foreground">{t("merchant.merchantId")}: <span dir="ltr" className="font-mono">{merchant.merchantId}</span></p>
                 <StoreStatusBadge status={status} />
               </div>
             </div>
             <div className="flex items-center gap-1">
+              <LanguageSwitcher />
               <NotificationsBell userUid={uid!} />
-              <Button variant="ghost" size="sm" onClick={signOut}><LogOut className="w-4 h-4 ml-2" /> خروج</Button>
+              <Button variant="ghost" size="sm" onClick={signOut}><LogOut className="w-4 h-4 ms-2" /> {t("common.logout")}</Button>
             </div>
           </div>
 
           {merchant.isFrozen && (
             <div className="bg-destructive/10 border border-destructive/40 text-destructive rounded-xl p-3 text-sm font-cairo">
-              متجرك موقوف حالياً ولا يمكنك تحصيل المدفوعات.
+              {t("merchant.frozenBanner")}
             </div>
           )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card className="bg-primary text-primary-foreground">
-              <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-primary-foreground/90 text-sm font-normal"><Wallet className="w-4 h-4" /> رصيد المحفظة</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-primary-foreground/90 text-sm font-normal"><Wallet className="w-4 h-4" /> {t("merchant.walletBalance")}</CardTitle></CardHeader>
               <CardContent>
-                <p className="text-3xl font-bold" dir="ltr">{merchant.walletBalance.toFixed(2)} <span className="text-base font-normal">ر.س</span></p>
+                <p className="text-3xl font-bold" dir="ltr">{merchant.walletBalance.toFixed(2)} <span className="text-base font-normal">{t("common.sar")}</span></p>
               </CardContent>
             </Card>
             <Card>
-              <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-sm font-normal"><ShieldCheck className="w-4 h-4 text-primary" /> حد الاستقبال</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-sm font-normal"><ShieldCheck className="w-4 h-4 text-primary" /> {t("merchant.receivingLimit")}</CardTitle></CardHeader>
               <CardContent>
-                <p className="text-3xl font-bold text-primary" dir="ltr">{merchant.receivingLimit.toFixed(0)} <span className="text-base text-muted-foreground">ر.س</span></p>
-                <p className="text-xs text-muted-foreground mt-2">الحد الأقصى لتحصيل المدفوعات الشهرية (يُحدَّد من الإدارة)</p>
+                <p className="text-3xl font-bold text-primary" dir="ltr">{merchant.receivingLimit.toFixed(0)} <span className="text-base text-muted-foreground">{t("common.sar")}</span></p>
+                <p className="text-xs text-muted-foreground mt-2">{t("merchant.receivingLimitHint")}</p>
               </CardContent>
             </Card>
           </div>
 
           <Card>
-            <CardHeader><CardTitle>تحصيل دفعة</CardTitle></CardHeader>
+            <CardHeader><CardTitle>{t("merchant.collectPayment")}</CardTitle></CardHeader>
             <CardContent>
               <div className="mb-3">
                 <MerchantQRScanner onDetected={(acct) => setScanAcct(acct)} />
               </div>
               <form onSubmit={submitScan} className="space-y-3">
                 <div>
-                  <Label>رقم حساب العميل</Label>
+                  <Label>{t("merchant.customerAccount")}</Label>
                   <Input dir="ltr" value={scanAcct} onChange={(e) => setScanAcct(e.target.value)} placeholder="1000000001" required />
                 </div>
                 <div>
-                  <Label>المبلغ (ر.س)</Label>
+                  <Label>{t("merchant.amount")}</Label>
                   <Input dir="ltr" type="number" min="0.01" step="0.01" value={scanAmount} onChange={(e) => setScanAmount(e.target.value)} required />
                 </div>
-                <Button type="submit" className="w-full" disabled={sending || merchant.isFrozen}>إرسال طلب الدفع للعميل</Button>
+                <Button type="submit" className="w-full" disabled={sending || merchant.isFrozen}>{t("merchant.sendRequest")}</Button>
               </form>
             </CardContent>
           </Card>
 
           <Tabs defaultValue="payments">
             <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="payments">مدفوعات العملاء</TabsTrigger>
-              <TabsTrigger value="settlements">تسويات جوار</TabsTrigger>
-              <TabsTrigger value="bank">الحساب البنكي</TabsTrigger>
+              <TabsTrigger value="payments">{t("merchant.tabs.payments")}</TabsTrigger>
+              <TabsTrigger value="settlements">{t("merchant.tabs.settlements")}</TabsTrigger>
+              <TabsTrigger value="bank">{t("merchant.tabs.bank")}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="payments" className="space-y-4 mt-4">
               {pendingSent.length > 0 && (
                 <Card>
-                  <CardHeader><CardTitle>بانتظار موافقة العميل</CardTitle></CardHeader>
+                  <CardHeader><CardTitle>{t("merchant.pendingApproval")}</CardTitle></CardHeader>
                   <CardContent>
                     <ul className="space-y-2">
                       {pendingSent.map((t) => (
@@ -354,7 +355,7 @@ const Dashboard = () => {
                             <p className="font-semibold">{t.amount} ر.س</p>
                             <p className="text-xs text-muted-foreground" dir="ltr">حساب: {t.account_number}</p>
                           </div>
-                          <span className="text-xs text-amber-600">قيد الانتظار</span>
+                          <span className="text-xs text-amber-600">{t("merchant.pending")}</span>
                         </li>
                       ))}
                     </ul>
@@ -362,9 +363,9 @@ const Dashboard = () => {
                 </Card>
               )}
               <Card>
-                <CardHeader><CardTitle>المدفوعات المستلمة</CardTitle></CardHeader>
+                <CardHeader><CardTitle>{t("merchant.receivedPayments")}</CardTitle></CardHeader>
                 <CardContent>
-                  {completedReceived.length === 0 && <p className="text-sm text-muted-foreground text-center">لا توجد مدفوعات مكتملة</p>}
+                  {completedReceived.length === 0 && <p className="text-sm text-muted-foreground text-center">{t("merchant.noPayments")}</p>}
                   <ul className="space-y-2">
                     {completedReceived.map((t) => (
                       <li key={t.id} className="flex justify-between border-b pb-2 text-sm">
@@ -400,7 +401,7 @@ const Dashboard = () => {
     );
   }
 
-  return <div className="min-h-screen flex items-center justify-center text-muted-foreground font-cairo">جارٍ تحميل بيانات الحساب...</div>;
+  return <div className="min-h-screen flex items-center justify-center text-muted-foreground font-cairo">{t("common.loading")}</div>;
 };
 
 export default Dashboard;
