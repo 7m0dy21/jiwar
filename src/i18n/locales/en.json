@@ -1,0 +1,67 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "logout": "Logout",
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "send": "Send",
+    "copy": "Copy",
+    "copied": "Copied",
+    "copyFailed": "Copy failed",
+    "sar": "SAR",
+    "language": "Language",
+    "arabic": "Arabic",
+    "english": "English"
+  },
+  "customer": {
+    "title": "My Jiwar Account",
+    "walletBalance": "Wallet Balance",
+    "paymentLimit": "Payment Limit",
+    "verificationStatus": "Verification Status (Nafath)",
+    "verified": "Verified ✓",
+    "notVerified": "Not Verified",
+    "verifiedHelp": "Your account is verified and can receive payment requests.",
+    "notVerifiedHelp": "You cannot approve any payment until your account is verified.",
+    "verifyAccount": "Verify Account",
+    "unverify": "Unverify",
+    "accountNumber": "Permanent Account Number",
+    "accountHint": "Your account number (unique & permanent)",
+    "paymentsHistory": "Payments History",
+    "noPayments": "No completed payments",
+    "frozenBanner": "Your account is currently frozen. Please contact support."
+  },
+  "merchant": {
+    "myStore": "My Store",
+    "merchantId": "ID",
+    "walletBalance": "Wallet Balance",
+    "receivingLimit": "Receiving Limit",
+    "receivingLimitHint": "Monthly maximum for receiving payments (set by admin)",
+    "collectPayment": "Collect Payment",
+    "customerAccount": "Customer Account Number",
+    "amount": "Amount (SAR)",
+    "sendRequest": "Send Payment Request",
+    "tabs": {
+      "payments": "Customer Payments",
+      "settlements": "Jiwar Settlements",
+      "bank": "Bank Account"
+    },
+    "pendingApproval": "Awaiting Customer Approval",
+    "receivedPayments": "Received Payments",
+    "noPayments": "No completed payments",
+    "pending": "Pending",
+    "frozenBanner": "Your store is suspended and cannot collect payments."
+  },
+  "admin": {
+    "title": "Admin Dashboard",
+    "tabs": {
+      "overview": "Overview",
+      "customers": "Customers",
+      "merchants": "Merchants",
+      "transactions": "Transactions",
+      "reports": "Reports",
+      "create": "Create User",
+      "managers": "Managers"
+    }
+  }
+}

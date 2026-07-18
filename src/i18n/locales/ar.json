@@ -1,0 +1,67 @@
+{
+  "common": {
+    "loading": "جارٍ التحميل...",
+    "logout": "خروج",
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "confirm": "تأكيد",
+    "send": "إرسال",
+    "copy": "نسخ",
+    "copied": "تم النسخ",
+    "copyFailed": "تعذر النسخ",
+    "sar": "ر.س",
+    "language": "اللغة",
+    "arabic": "العربية",
+    "english": "الإنجليزية"
+  },
+  "customer": {
+    "title": "حسابي في جوار",
+    "walletBalance": "رصيد المحفظة",
+    "paymentLimit": "حد الدفع",
+    "verificationStatus": "حالة التحقق (نفاذ)",
+    "verified": "موثّق ✓",
+    "notVerified": "غير موثّق",
+    "verifiedHelp": "حسابك موثّق ويمكنك استقبال طلبات الدفع.",
+    "notVerifiedHelp": "لن تستطيع الموافقة على أي عملية دفع حتى يتم توثيق الحساب.",
+    "verifyAccount": "توثيق الحساب",
+    "unverify": "إلغاء التوثيق",
+    "accountNumber": "رقم الحساب الثابت",
+    "accountHint": "رقم حسابك (فريد ودائم)",
+    "paymentsHistory": "سجل المدفوعات",
+    "noPayments": "لا توجد عمليات مكتملة",
+    "frozenBanner": "حسابك مجمّد حالياً. الرجاء التواصل مع الدعم."
+  },
+  "merchant": {
+    "myStore": "متجري",
+    "merchantId": "المعرف",
+    "walletBalance": "رصيد المحفظة",
+    "receivingLimit": "حد الاستقبال",
+    "receivingLimitHint": "الحد الأقصى لتحصيل المدفوعات الشهرية (يُحدَّد من الإدارة)",
+    "collectPayment": "تحصيل دفعة",
+    "customerAccount": "رقم حساب العميل",
+    "amount": "المبلغ (ر.س)",
+    "sendRequest": "إرسال طلب الدفع للعميل",
+    "tabs": {
+      "payments": "مدفوعات العملاء",
+      "settlements": "تسويات جوار",
+      "bank": "الحساب البنكي"
+    },
+    "pendingApproval": "بانتظار موافقة العميل",
+    "receivedPayments": "المدفوعات المستلمة",
+    "noPayments": "لا توجد مدفوعات مكتملة",
+    "pending": "قيد الانتظار",
+    "frozenBanner": "متجرك موقوف حالياً ولا يمكنك تحصيل المدفوعات."
+  },
+  "admin": {
+    "title": "لوحة التحكم",
+    "tabs": {
+      "overview": "نظرة عامة",
+      "customers": "العملاء",
+      "merchants": "التجار",
+      "transactions": "العمليات",
+      "reports": "التقارير",
+      "create": "إنشاء مستخدم",
+      "managers": "المشرفون"
+    }
+  }
+}
