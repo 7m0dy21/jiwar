@@ -161,7 +161,7 @@ const Dashboard = () => {
     finally { setSending(false); }
   };
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center text-muted-foreground font-cairo">جارٍ التحميل...</div>;
+  if (loading) return <div className="min-h-screen flex items-center justify-center text-muted-foreground font-cairo">{t("common.loading")}</div>;
   if (!user) return <Navigate to="/auth" replace />;
   if (role === "admin") return <Navigate to="/admin" replace />;
 
@@ -175,18 +175,19 @@ const Dashboard = () => {
         <div className="max-w-3xl mx-auto space-y-5">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-cairo font-bold">حسابي في جوار</h1>
+              <h1 className="text-2xl font-cairo font-bold">{t("customer.title")}</h1>
               <p className="text-xs text-muted-foreground">{customer.fullName || customer.email}</p>
             </div>
             <div className="flex items-center gap-1">
+              <LanguageSwitcher />
               <NotificationsBell userUid={uid!} />
-              <Button variant="ghost" size="sm" onClick={signOut}><LogOut className="w-4 h-4 ml-2" /> خروج</Button>
+              <Button variant="ghost" size="sm" onClick={signOut}><LogOut className="w-4 h-4 ms-2" /> {t("common.logout")}</Button>
             </div>
           </div>
 
           {customer.isFrozen && (
             <div className="bg-destructive/10 border border-destructive/40 text-destructive rounded-xl p-3 text-sm font-cairo">
-              حسابك مجمّد حالياً. الرجاء التواصل مع الدعم.
+              {t("customer.frozenBanner")}
             </div>
           )}
 
@@ -194,25 +195,25 @@ const Dashboard = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card className="bg-primary text-primary-foreground">
-              <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-primary-foreground/90 text-sm font-normal"><Wallet className="w-4 h-4" /> رصيد المحفظة</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-primary-foreground/90 text-sm font-normal"><Wallet className="w-4 h-4" /> {t("customer.walletBalance")}</CardTitle></CardHeader>
               <CardContent>
-                <p className="text-3xl font-bold" dir="ltr">{customer.walletBalance.toFixed(2)} <span className="text-base font-normal">ر.س</span></p>
-                <p className="text-xs opacity-80 mt-2">حد الدفع: {customer.paymentLimit.toFixed(0)} ر.س</p>
+                <p className="text-3xl font-bold" dir="ltr">{customer.walletBalance.toFixed(2)} <span className="text-base font-normal">{t("common.sar")}</span></p>
+                <p className="text-xs opacity-80 mt-2">{t("customer.paymentLimit")}: {customer.paymentLimit.toFixed(0)} {t("common.sar")}</p>
               </CardContent>
             </Card>
 
             <Card className={customer.isVerified ? "border-primary/40" : "border-destructive/40"}>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-normal flex items-center justify-between">
-                  <span>حالة التحقق (نفاذ)</span>
+                  <span>{t("customer.verificationStatus")}</span>
                   <span className={customer.isVerified ? "text-primary font-bold" : "text-destructive font-bold"}>
-                    {customer.isVerified ? "موثّق ✓" : "غير موثّق"}
+                    {customer.isVerified ? t("customer.verified") : t("customer.notVerified")}
                   </span>
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  {customer.isVerified ? "حسابك موثّق ويمكنك استقبال طلبات الدفع." : "لن تستطيع الموافقة على أي عملية دفع حتى يتم توثيق الحساب."}
+                  {customer.isVerified ? t("customer.verifiedHelp") : t("customer.notVerifiedHelp")}
                 </p>
                 <Button size="sm" variant={customer.isVerified ? "outline" : "default"} className="w-full"
                   onClick={async () => {
@@ -220,22 +221,22 @@ const Dashboard = () => {
                       toast.success(customer.isVerified ? "تم إلغاء التوثيق" : "تم توثيق الحساب");
                     } catch (e: any) { toast.error(e?.message || "فشل التحديث"); }
                   }}>
-                  {customer.isVerified ? "إلغاء التوثيق" : "توثيق الحساب"}
+                  {customer.isVerified ? t("customer.unverify") : t("customer.verifyAccount")}
                 </Button>
               </CardContent>
             </Card>
           </div>
 
           <Card>
-            <CardHeader><CardTitle>رقم الحساب الثابت</CardTitle></CardHeader>
+            <CardHeader><CardTitle>{t("customer.accountNumber")}</CardTitle></CardHeader>
             <CardContent className="space-y-4 text-center">
               <div className="bg-white p-4 rounded-2xl inline-block min-h-[272px] min-w-[272px] flex items-center justify-center">
                 {customer.accountNumber
                   ? <QRCodeSVG value={customer.accountNumber} size={240} level="M" marginSize={2} />
-                  : <span className="text-muted-foreground text-sm">جارٍ التحميل...</span>}
+                  : <span className="text-muted-foreground text-sm">{t("common.loading")}</span>}
               </div>
               <div>
-                <p className="text-xs text-muted-foreground mb-1">رقم حسابك (فريد ودائم)</p>
+                <p className="text-xs text-muted-foreground mb-1">{t("customer.accountHint")}</p>
                 <div className="flex items-center justify-center gap-2">
                   <p dir="ltr" className="font-mono font-bold text-2xl tracking-widest text-primary">{customer.accountNumber}</p>
                   <Button variant="ghost" size="icon" onClick={() => copy(customer.accountNumber)}><Copy className="w-4 h-4" /></Button>
@@ -247,9 +248,9 @@ const Dashboard = () => {
           <NearbyStores />
 
           <Card>
-            <CardHeader><CardTitle>سجل المدفوعات</CardTitle></CardHeader>
+            <CardHeader><CardTitle>{t("customer.paymentsHistory")}</CardTitle></CardHeader>
             <CardContent>
-              {completed.length === 0 && <p className="text-sm text-muted-foreground text-center">لا توجد عمليات مكتملة</p>}
+              {completed.length === 0 && <p className="text-sm text-muted-foreground text-center">{t("customer.noPayments")}</p>}
               <ul className="space-y-2">
                 {completed.map((t) => (
                   <li key={t.id} className="flex justify-between border-b pb-2 text-sm">
