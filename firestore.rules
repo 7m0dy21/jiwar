@@ -140,11 +140,17 @@ service cloud.firestore {
     // ---------- notifications/{id} ----------
     match /notifications/{id} {
       allow read: if isSignedIn() && resource.data.user_uid == request.auth.uid;
-      allow create: if isSignedIn() && request.resource.data.user_uid == request.auth.uid;
+      // Any signed-in user may create a notification addressed to another user
+      // (e.g. merchant → customer payment request, admin → user alerts).
+      allow create: if isSignedIn()
+        && request.resource.data.user_uid is string
+        && request.resource.data.title is string
+        && request.resource.data.body is string;
       allow update: if isSignedIn() && resource.data.user_uid == request.auth.uid
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['read']);
       allow delete: if isAdmin();
     }
+
 
     // ---------- settlements/{id} ----------
     match /settlements/{id} {
