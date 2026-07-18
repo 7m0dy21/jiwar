@@ -1,16 +1,19 @@
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter } from "@/components/ui/sidebar";
-import { Users, Store, ArrowLeftRight, ShieldCheck, LogOut } from "lucide-react";
+import { LayoutDashboard, Users, Store, ArrowLeftRight, ShieldCheck, LogOut, FileText, UserPlus } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 
-export type AdminTab = "customers" | "merchants" | "transactions" | "managers";
+export type AdminTab = "overview" | "customers" | "merchants" | "transactions" | "reports" | "create" | "managers";
 
 interface Props { activeTab: AdminTab; onTabChange: (t: AdminTab) => void; }
 
 const items: { key: AdminTab; label: string; icon: any }[] = [
+  { key: "overview", label: "المؤشرات", icon: LayoutDashboard },
   { key: "customers", label: "العملاء", icon: Users },
   { key: "merchants", label: "التجار", icon: Store },
-  { key: "transactions", label: "المعاملات", icon: ArrowLeftRight },
+  { key: "transactions", label: "سجل العمليات", icon: ArrowLeftRight },
+  { key: "reports", label: "التقارير", icon: FileText },
+  { key: "create", label: "إضافة مستخدم", icon: UserPlus },
   { key: "managers", label: "المشرفون", icon: ShieldCheck },
 ];
 
