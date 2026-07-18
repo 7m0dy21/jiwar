@@ -40,6 +40,7 @@ interface MerchantView {
 interface CustomerView extends CustomerAccount { paymentLimit: number; debtDueDate: number | null; isFrozen: boolean; }
 
 const Dashboard = () => {
+  const { t } = useTranslation();
   const { user, loading, role, signOut } = useAuth();
   const uid = user?.uid ?? null;
   const [customer, setCustomer] = useState<CustomerView | null>(null);
