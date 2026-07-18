@@ -349,11 +349,11 @@ const Dashboard = () => {
                   <CardHeader><CardTitle>{t("merchant.pendingApproval")}</CardTitle></CardHeader>
                   <CardContent>
                     <ul className="space-y-2">
-                      {pendingSent.map((t) => (
-                        <li key={t.id} className="flex justify-between border-b pb-2 text-sm">
+                      {pendingSent.map((tx) => (
+                        <li key={tx.id} className="flex justify-between border-b pb-2 text-sm">
                           <div>
-                            <p className="font-semibold">{t.amount} ر.س</p>
-                            <p className="text-xs text-muted-foreground" dir="ltr">حساب: {t.account_number}</p>
+                            <p className="font-semibold">{tx.amount} {t("common.sar")}</p>
+                            <p className="text-xs text-muted-foreground" dir="ltr">{tx.account_number}</p>
                           </div>
                           <span className="text-xs text-amber-600">{t("merchant.pending")}</span>
                         </li>
