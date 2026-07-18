@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { doc, onSnapshot } from "firebase/firestore";
+import { useTranslation } from "react-i18next";
 import { getDb } from "@/config/firebase";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,7 @@ import RepaymentBanner from "@/components/customer/RepaymentBanner";
 import StoreStatusBadge, { getMerchantStatus } from "@/components/merchant/StoreStatusBadge";
 import SettlementsLog from "@/components/merchant/SettlementsLog";
 import BankDetailsForm from "@/components/merchant/BankDetailsForm";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { pushNotification } from "@/lib/firebaseNotifications";
 import { playNotificationSound } from "@/lib/notificationSound";
 
