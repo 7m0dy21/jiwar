@@ -74,7 +74,7 @@ const Dashboard = () => {
         walletBalance: typeof d.wallet_balance === "number" ? d.wallet_balance : 0,
         isVerified: d.is_verified === true,
         isFrozen: d.is_frozen === true,
-        receivingLimit: typeof d.receiving_limit === "number" ? d.receiving_limit : 50000,
+        receivingLimit: typeof d.receiving_limit === "number" ? d.receiving_limit : 5000,
         iban: d.iban ?? null, bankName: d.bank_name ?? null, bankHolder: d.bank_holder ?? null,
         createdAt: d.created_at?.toMillis?.() ?? null,
       });
@@ -306,7 +306,7 @@ const Dashboard = () => {
               <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-sm font-normal"><ShieldCheck className="w-4 h-4 text-primary" /> حد الاستقبال</CardTitle></CardHeader>
               <CardContent>
                 <p className="text-3xl font-bold text-primary" dir="ltr">{merchant.receivingLimit.toFixed(0)} <span className="text-base text-muted-foreground">ر.س</span></p>
-                <p className="text-xs text-muted-foreground mt-2">الحد الأقصى لكل عملية تحصيل (يُحدَّد من الإدارة)</p>
+                <p className="text-xs text-muted-foreground mt-2">الحد الأقصى لتحصيل المدفوعات الشهرية (يُحدَّد من الإدارة)</p>
               </CardContent>
             </Card>
           </div>
