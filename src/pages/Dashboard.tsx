@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { doc, onSnapshot } from "firebase/firestore";
@@ -8,8 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Copy, LogOut, Store, Wallet } from "lucide-react";
+import { Copy, LogOut, Store, Wallet, ShieldCheck } from "lucide-react";
 import {
   createMerchantTransaction,
   subscribeCustomerTransactions,
@@ -17,19 +18,36 @@ import {
   type TransactionRecord,
 } from "@/lib/firebaseTransactions";
 import { setCustomerVerified, type CustomerAccount } from "@/lib/firebaseCustomers";
-import type { MerchantAccount } from "@/lib/firebaseMerchants";
 import MerchantQRScanner from "@/components/firebase/MerchantQRScanner";
 import CustomerApprovalModal from "@/components/firebase/CustomerApprovalModal";
+import NotificationsBell from "@/components/customer/NotificationsBell";
+import NearbyStores from "@/components/customer/NearbyStores";
+import RepaymentBanner from "@/components/customer/RepaymentBanner";
+import StoreStatusBadge, { getMerchantStatus } from "@/components/merchant/StoreStatusBadge";
+import SettlementsLog from "@/components/merchant/SettlementsLog";
+import BankDetailsForm from "@/components/merchant/BankDetailsForm";
+import { pushNotification } from "@/lib/firebaseNotifications";
+import { playNotificationSound } from "@/lib/notificationSound";
+
+interface MerchantView {
+  uid: string; merchantId: string; storeName: string; email: string;
+  phone: string | null; walletBalance: number; isVerified: boolean; isFrozen: boolean;
+  receivingLimit: number; iban: string | null; bankName: string | null; bankHolder: string | null;
+  createdAt: number | null;
+}
+interface CustomerView extends CustomerAccount { paymentLimit: number; debtDueDate: number | null; isFrozen: boolean; }
 
 const Dashboard = () => {
   const { user, loading, role, signOut } = useAuth();
   const uid = user?.uid ?? null;
-  const [customer, setCustomer] = useState<CustomerAccount | null>(null);
-  const [merchant, setMerchant] = useState<MerchantAccount | null>(null);
+  const [customer, setCustomer] = useState<CustomerView | null>(null);
+  const [merchant, setMerchant] = useState<MerchantView | null>(null);
   const [txs, setTxs] = useState<TransactionRecord[]>([]);
   const [scanAcct, setScanAcct] = useState("");
   const [scanAmount, setScanAmount] = useState("");
   const [sending, setSending] = useState(false);
+  const seenTxIds = useRef<Set<string>>(new Set());
+  const firstTxLoad = useRef(true);
 
   useEffect(() => {
     if (!uid) return;
@@ -41,6 +59,9 @@ const Dashboard = () => {
         phone: d.phone ?? null, email: d.email ?? "",
         walletBalance: typeof d.wallet_balance === "number" ? d.wallet_balance : 0,
         isVerified: d.is_verified === true,
+        isFrozen: d.is_frozen === true,
+        paymentLimit: typeof d.payment_limit === "number" ? d.payment_limit : 5000,
+        debtDueDate: d.debt_due_date?.toMillis?.() ?? (typeof d.debt_due_date === "number" ? d.debt_due_date : null),
         createdAt: d.created_at?.toMillis?.() ?? null,
       });
     });
@@ -51,6 +72,10 @@ const Dashboard = () => {
         uid, merchantId: d.merchant_id ?? "", storeName: d.store_name ?? "",
         phone: d.phone ?? null, email: d.email ?? "",
         walletBalance: typeof d.wallet_balance === "number" ? d.wallet_balance : 0,
+        isVerified: d.is_verified === true,
+        isFrozen: d.is_frozen === true,
+        receivingLimit: typeof d.receiving_limit === "number" ? d.receiving_limit : 50000,
+        iban: d.iban ?? null, bankName: d.bank_name ?? null, bankHolder: d.bank_holder ?? null,
         createdAt: d.created_at?.toMillis?.() ?? null,
       });
     });
@@ -63,6 +88,54 @@ const Dashboard = () => {
     if (customer) return subscribeCustomerTransactions(uid, setTxs);
   }, [uid, customer, merchant]);
 
+  // Sound + notification when a merchant receives a NEW completed payment
+  useEffect(() => {
+    if (!merchant || !uid) return;
+    if (firstTxLoad.current) {
+      txs.forEach((t) => seenTxIds.current.add(t.id + t.status));
+      firstTxLoad.current = false;
+      return;
+    }
+    txs.forEach((t) => {
+      const key = t.id + t.status;
+      if (!seenTxIds.current.has(key)) {
+        seenTxIds.current.add(key);
+        if (t.status === "completed") {
+          playNotificationSound();
+          toast.success(`تم استلام دفعة: ${t.amount.toFixed(2)} ر.س`);
+          pushNotification(uid, {
+            title: "دفعة جديدة",
+            body: `استلمت ${t.amount.toFixed(2)} ر.س من حساب ${t.account_number}`,
+            type: "payment",
+          }).catch(() => {});
+        }
+      }
+    });
+  }, [txs, merchant, uid]);
+
+  // Deduction notification for customer
+  useEffect(() => {
+    if (!customer || !uid) return;
+    if (firstTxLoad.current) {
+      txs.forEach((t) => seenTxIds.current.add(t.id + t.status));
+      firstTxLoad.current = false;
+      return;
+    }
+    txs.forEach((t) => {
+      const key = t.id + t.status;
+      if (!seenTxIds.current.has(key)) {
+        seenTxIds.current.add(key);
+        if (t.status === "completed") {
+          pushNotification(uid, {
+            title: "خصم من محفظتك",
+            body: `تم خصم ${t.amount.toFixed(2)} ر.س لصالح التاجر ${t.merchant_id}`,
+            type: "deduction",
+          }).catch(() => {});
+        }
+      }
+    });
+  }, [txs, customer, uid]);
+
   const copy = async (t: string) => {
     try { await navigator.clipboard.writeText(t); toast.success("تم النسخ"); }
     catch { toast.error("تعذر النسخ"); }
@@ -72,6 +145,10 @@ const Dashboard = () => {
     e.preventDefault();
     if (!uid) return;
     const amt = parseFloat(scanAmount);
+    if (merchant?.isFrozen) { toast.error("متجرك موقوف حالياً"); return; }
+    if (merchant && amt > merchant.receivingLimit) {
+      toast.error(`المبلغ يتجاوز حد الاستقبال: ${merchant.receivingLimit} ر.س`); return;
+    }
     setSending(true);
     try {
       await createMerchantTransaction(uid, scanAcct.trim(), amt);
@@ -85,48 +162,66 @@ const Dashboard = () => {
   if (!user) return <Navigate to="/auth" replace />;
   if (role === "admin") return <Navigate to="/admin" replace />;
 
-  // Customer view
+  // ============ CUSTOMER VIEW ============
   if (customer) {
     const completed = txs.filter((t) => t.status === "completed");
+    const outstanding = completed.reduce((s, t) => s + t.amount, 0);
     return (
-      <div className="min-h-screen bg-background p-6">
-        <CustomerApprovalModal customerUid={uid!} walletBalance={customer.walletBalance} isVerified={customer.isVerified} />
-        <div className="max-w-md mx-auto space-y-6">
+      <div className="min-h-screen bg-background p-4 md:p-6">
+        <CustomerApprovalModal customerUid={uid!} walletBalance={customer.walletBalance} isVerified={customer.isVerified && !customer.isFrozen} />
+        <div className="max-w-3xl mx-auto space-y-5">
           <div className="flex items-center justify-between">
-            <h1 className="text-2xl font-cairo font-bold">حسابي في جوار</h1>
-            <Button variant="ghost" size="sm" onClick={signOut}><LogOut className="w-4 h-4 ml-2" /> خروج</Button>
+            <div>
+              <h1 className="text-2xl font-cairo font-bold">حسابي في جوار</h1>
+              <p className="text-xs text-muted-foreground">{customer.fullName || customer.email}</p>
+            </div>
+            <div className="flex items-center gap-1">
+              <NotificationsBell userUid={uid!} />
+              <Button variant="ghost" size="sm" onClick={signOut}><LogOut className="w-4 h-4 ml-2" /> خروج</Button>
+            </div>
           </div>
 
-          <Card className="bg-primary text-primary-foreground">
-            <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-primary-foreground/90 text-sm font-normal"><Wallet className="w-4 h-4" /> رصيد المحفظة</CardTitle></CardHeader>
-            <CardContent>
-              <p className="text-4xl font-bold" dir="ltr">{customer.walletBalance.toFixed(2)} <span className="text-lg font-normal">ر.س</span></p>
-            </CardContent>
-          </Card>
+          {customer.isFrozen && (
+            <div className="bg-destructive/10 border border-destructive/40 text-destructive rounded-xl p-3 text-sm font-cairo">
+              حسابك مجمّد حالياً. الرجاء التواصل مع الدعم.
+            </div>
+          )}
 
-          <Card className={customer.isVerified ? "border-primary/40" : "border-destructive/40"}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-normal flex items-center justify-between">
-                <span>حالة التحقق (نفاذ)</span>
-                <span className={customer.isVerified ? "text-primary font-bold" : "text-destructive font-bold"}>
-                  {customer.isVerified ? "موثّق ✓" : "غير موثّق"}
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-xs text-muted-foreground">
-                {customer.isVerified ? "حسابك موثّق ويمكنك استقبال طلبات الدفع." : "لن تستطيع الموافقة على أي عملية دفع حتى يتم توثيق الحساب."}
-              </p>
-              <Button size="sm" variant={customer.isVerified ? "outline" : "default"} className="w-full"
-                onClick={async () => {
-                  try { await setCustomerVerified(uid!, !customer.isVerified);
-                    toast.success(customer.isVerified ? "تم إلغاء التوثيق" : "تم توثيق الحساب");
-                  } catch (e: any) { toast.error(e?.message || "فشل التحديث"); }
-                }}>
-                {customer.isVerified ? "إلغاء التوثيق (Admin)" : "توثيق الحساب (Admin/Nafath)"}
-              </Button>
-            </CardContent>
-          </Card>
+          <RepaymentBanner dueDate={customer.debtDueDate} amount={outstanding} />
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card className="bg-primary text-primary-foreground">
+              <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-primary-foreground/90 text-sm font-normal"><Wallet className="w-4 h-4" /> رصيد المحفظة</CardTitle></CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold" dir="ltr">{customer.walletBalance.toFixed(2)} <span className="text-base font-normal">ر.س</span></p>
+                <p className="text-xs opacity-80 mt-2">حد الدفع: {customer.paymentLimit.toFixed(0)} ر.س</p>
+              </CardContent>
+            </Card>
+
+            <Card className={customer.isVerified ? "border-primary/40" : "border-destructive/40"}>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-normal flex items-center justify-between">
+                  <span>حالة التحقق (نفاذ)</span>
+                  <span className={customer.isVerified ? "text-primary font-bold" : "text-destructive font-bold"}>
+                    {customer.isVerified ? "موثّق ✓" : "غير موثّق"}
+                  </span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  {customer.isVerified ? "حسابك موثّق ويمكنك استقبال طلبات الدفع." : "لن تستطيع الموافقة على أي عملية دفع حتى يتم توثيق الحساب."}
+                </p>
+                <Button size="sm" variant={customer.isVerified ? "outline" : "default"} className="w-full"
+                  onClick={async () => {
+                    try { await setCustomerVerified(uid!, !customer.isVerified);
+                      toast.success(customer.isVerified ? "تم إلغاء التوثيق" : "تم توثيق الحساب");
+                    } catch (e: any) { toast.error(e?.message || "فشل التحديث"); }
+                  }}>
+                  {customer.isVerified ? "إلغاء التوثيق" : "توثيق الحساب"}
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
 
           <Card>
             <CardHeader><CardTitle>رقم الحساب الثابت</CardTitle></CardHeader>
@@ -143,23 +238,20 @@ const Dashboard = () => {
                   <Button variant="ghost" size="icon" onClick={() => copy(customer.accountNumber)}><Copy className="w-4 h-4" /></Button>
                 </div>
               </div>
-              <div className="text-sm text-muted-foreground text-right space-y-1">
-                <p><strong>الاسم:</strong> {customer.fullName || "—"}</p>
-                <p><strong>البريد:</strong> {customer.email}</p>
-                <p><strong>الجوال:</strong> {customer.phone || "—"}</p>
-              </div>
             </CardContent>
           </Card>
 
+          <NearbyStores />
+
           <Card>
-            <CardHeader><CardTitle>عملياتي المكتملة</CardTitle></CardHeader>
+            <CardHeader><CardTitle>سجل المدفوعات</CardTitle></CardHeader>
             <CardContent>
               {completed.length === 0 && <p className="text-sm text-muted-foreground text-center">لا توجد عمليات مكتملة</p>}
               <ul className="space-y-2">
                 {completed.map((t) => (
                   <li key={t.id} className="flex justify-between border-b pb-2 text-sm">
                     <div>
-                      <p className="font-semibold">{t.amount} ر.س</p>
+                      <p className="font-semibold text-destructive" dir="ltr">- {t.amount.toFixed(2)} ر.س</p>
                       <p className="text-xs text-muted-foreground" dir="ltr">تاجر: {t.merchant_id}</p>
                     </div>
                     <span className="text-xs text-muted-foreground">
@@ -175,27 +267,49 @@ const Dashboard = () => {
     );
   }
 
-  // Merchant view
+  // ============ MERCHANT VIEW ============
   if (merchant) {
     const pendingSent = txs.filter((t) => t.status === "pending");
     const completedReceived = txs.filter((t) => t.status === "completed");
+    const status = getMerchantStatus({ is_verified: merchant.isVerified, is_frozen: merchant.isFrozen });
     return (
-      <div className="min-h-screen bg-background p-6">
-        <div className="max-w-md mx-auto space-y-6">
+      <div className="min-h-screen bg-background p-4 md:p-6">
+        <div className="max-w-3xl mx-auto space-y-5">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-cairo font-bold flex items-center gap-2"><Store className="w-6 h-6" />{merchant.storeName || "متجري"}</h1>
-              <p className="text-xs text-muted-foreground">المعرف: <span dir="ltr" className="font-mono">{merchant.merchantId}</span></p>
+              <div className="flex items-center gap-2 mt-1">
+                <p className="text-xs text-muted-foreground">المعرف: <span dir="ltr" className="font-mono">{merchant.merchantId}</span></p>
+                <StoreStatusBadge status={status} />
+              </div>
             </div>
-            <Button variant="ghost" size="sm" onClick={signOut}><LogOut className="w-4 h-4 ml-2" /> خروج</Button>
+            <div className="flex items-center gap-1">
+              <NotificationsBell userUid={uid!} />
+              <Button variant="ghost" size="sm" onClick={signOut}><LogOut className="w-4 h-4 ml-2" /> خروج</Button>
+            </div>
           </div>
 
-          <Card className="bg-primary text-primary-foreground">
-            <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-primary-foreground/90 text-sm font-normal"><Wallet className="w-4 h-4" /> رصيد المحفظة</CardTitle></CardHeader>
-            <CardContent>
-              <p className="text-4xl font-bold" dir="ltr">{merchant.walletBalance.toFixed(2)} <span className="text-lg font-normal">ر.س</span></p>
-            </CardContent>
-          </Card>
+          {merchant.isFrozen && (
+            <div className="bg-destructive/10 border border-destructive/40 text-destructive rounded-xl p-3 text-sm font-cairo">
+              متجرك موقوف حالياً ولا يمكنك تحصيل المدفوعات.
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card className="bg-primary text-primary-foreground">
+              <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-primary-foreground/90 text-sm font-normal"><Wallet className="w-4 h-4" /> رصيد المحفظة</CardTitle></CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold" dir="ltr">{merchant.walletBalance.toFixed(2)} <span className="text-base font-normal">ر.س</span></p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-sm font-normal"><ShieldCheck className="w-4 h-4 text-primary" /> حد الاستقبال</CardTitle></CardHeader>
+              <CardContent>
+                <p className="text-3xl font-bold text-primary" dir="ltr">{merchant.receivingLimit.toFixed(0)} <span className="text-base text-muted-foreground">ر.س</span></p>
+                <p className="text-xs text-muted-foreground mt-2">الحد الأقصى لكل عملية تحصيل (يُحدَّد من الإدارة)</p>
+              </CardContent>
+            </Card>
+          </div>
 
           <Card>
             <CardHeader><CardTitle>تحصيل دفعة</CardTitle></CardHeader>
@@ -212,52 +326,71 @@ const Dashboard = () => {
                   <Label>المبلغ (ر.س)</Label>
                   <Input dir="ltr" type="number" min="0.01" step="0.01" value={scanAmount} onChange={(e) => setScanAmount(e.target.value)} required />
                 </div>
-                <Button type="submit" className="w-full" disabled={sending}>إرسال طلب الدفع للعميل</Button>
+                <Button type="submit" className="w-full" disabled={sending || merchant.isFrozen}>إرسال طلب الدفع للعميل</Button>
               </form>
-              <p className="text-xs text-muted-foreground mt-3 text-center">
-                يُرسل الطلب فوراً للعميل لموافقته. لا يمكنك رؤية بياناته الشخصية.
-              </p>
             </CardContent>
           </Card>
 
-          {pendingSent.length > 0 && (
-            <Card>
-              <CardHeader><CardTitle>بانتظار موافقة العميل</CardTitle></CardHeader>
-              <CardContent>
-                <ul className="space-y-2">
-                  {pendingSent.map((t) => (
-                    <li key={t.id} className="flex justify-between border-b pb-2 text-sm">
-                      <div>
-                        <p className="font-semibold">{t.amount} ر.س</p>
-                        <p className="text-xs text-muted-foreground" dir="ltr">حساب: {t.account_number}</p>
-                      </div>
-                      <span className="text-xs text-amber-600">قيد الانتظار</span>
-                    </li>
-                  ))}
-                </ul>
-              </CardContent>
-            </Card>
-          )}
+          <Tabs defaultValue="payments">
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="payments">مدفوعات العملاء</TabsTrigger>
+              <TabsTrigger value="settlements">تسويات جوار</TabsTrigger>
+              <TabsTrigger value="bank">الحساب البنكي</TabsTrigger>
+            </TabsList>
 
-          <Card>
-            <CardHeader><CardTitle>المدفوعات المستلمة</CardTitle></CardHeader>
-            <CardContent>
-              {completedReceived.length === 0 && <p className="text-sm text-muted-foreground text-center">لا توجد مدفوعات مكتملة</p>}
-              <ul className="space-y-2">
-                {completedReceived.map((t) => (
-                  <li key={t.id} className="flex justify-between border-b pb-2 text-sm">
-                    <div>
-                      <p className="font-semibold">{t.amount} ر.س</p>
-                      <p className="text-xs text-muted-foreground" dir="ltr">حساب: {t.account_number}</p>
-                    </div>
-                    <span className="text-xs text-muted-foreground">
-                      {t.created_at ? new Date(t.created_at).toLocaleString("ar-SA") : ""}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
+            <TabsContent value="payments" className="space-y-4 mt-4">
+              {pendingSent.length > 0 && (
+                <Card>
+                  <CardHeader><CardTitle>بانتظار موافقة العميل</CardTitle></CardHeader>
+                  <CardContent>
+                    <ul className="space-y-2">
+                      {pendingSent.map((t) => (
+                        <li key={t.id} className="flex justify-between border-b pb-2 text-sm">
+                          <div>
+                            <p className="font-semibold">{t.amount} ر.س</p>
+                            <p className="text-xs text-muted-foreground" dir="ltr">حساب: {t.account_number}</p>
+                          </div>
+                          <span className="text-xs text-amber-600">قيد الانتظار</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </CardContent>
+                </Card>
+              )}
+              <Card>
+                <CardHeader><CardTitle>المدفوعات المستلمة</CardTitle></CardHeader>
+                <CardContent>
+                  {completedReceived.length === 0 && <p className="text-sm text-muted-foreground text-center">لا توجد مدفوعات مكتملة</p>}
+                  <ul className="space-y-2">
+                    {completedReceived.map((t) => (
+                      <li key={t.id} className="flex justify-between border-b pb-2 text-sm">
+                        <div>
+                          <p className="font-semibold text-primary" dir="ltr">+ {t.amount.toFixed(2)} ر.س</p>
+                          <p className="text-xs text-muted-foreground" dir="ltr">حساب: {t.account_number}</p>
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {t.created_at ? new Date(t.created_at).toLocaleString("ar-SA") : ""}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="settlements" className="mt-4">
+              <SettlementsLog merchantUid={uid!} />
+            </TabsContent>
+
+            <TabsContent value="bank" className="mt-4">
+              <BankDetailsForm
+                merchantUid={uid!}
+                initialIban={merchant.iban ?? undefined}
+                initialBankName={merchant.bankName ?? undefined}
+                initialHolder={merchant.bankHolder ?? undefined}
+              />
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
     );
