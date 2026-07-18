@@ -7,8 +7,11 @@ import {
   onSnapshot,
   serverTimestamp,
   setDoc,
+  updateDoc,
 } from "firebase/firestore";
 import { getDb } from "@/config/firebase";
+
+export type AdminPermission = "view_only" | "edit_limits" | "full_access";
 
 export interface AdminRecord {
   uid: string;
@@ -16,19 +19,27 @@ export interface AdminRecord {
   promoted_at: number | null;
   email?: string;
   full_name?: string;
+  permission?: AdminPermission;
+  is_super?: boolean;
 }
 
 export const promoteToAdmin = async (
   targetUid: string,
-  meta?: { email?: string; full_name?: string }
+  meta?: { email?: string; full_name?: string; permission?: AdminPermission },
 ) => {
   await setDoc(doc(getDb(), "admins", targetUid), {
     uid: targetUid,
     role: "admin",
     email: meta?.email ?? null,
     full_name: meta?.full_name ?? null,
+    permission: meta?.permission ?? "view_only",
+    is_super: false,
     promoted_at: serverTimestamp(),
   });
+};
+
+export const setAdminPermission = async (uid: string, permission: AdminPermission) => {
+  await updateDoc(doc(getDb(), "admins", uid), { permission });
 };
 
 export const demoteAdmin = async (targetUid: string) => {
@@ -51,8 +62,10 @@ export const subscribeAdmins = (cb: (list: AdminRecord[]) => void) => {
           promoted_at: data.promoted_at?.toMillis?.() ?? null,
           email: data.email ?? undefined,
           full_name: data.full_name ?? undefined,
+          permission: (data.permission as AdminPermission) ?? "view_only",
+          is_super: data.is_super === true,
         };
-      })
+      }),
     );
   });
 };
@@ -67,6 +80,8 @@ export const listAdminsOnce = async (): Promise<AdminRecord[]> => {
       promoted_at: data.promoted_at?.toMillis?.() ?? null,
       email: data.email ?? undefined,
       full_name: data.full_name ?? undefined,
+      permission: (data.permission as AdminPermission) ?? "view_only",
+      is_super: data.is_super === true,
     };
   });
 };
